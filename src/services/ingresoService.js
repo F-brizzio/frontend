@@ -22,13 +22,13 @@ export const getHistorialIngresos = async () => {
     }
 };
 
-// --- AGREGA ESTA FUNCIÓN AQUÍ PARA CORREGIR EL ERROR ---
+// 3. Actualizar un registro del historial (ESTA ES LA QUE FALTA)
 export const actualizarIngresoItem = async (id, data) => {
     try {
         const response = await api.put(`/api/ingresos/${id}`, data);
         return response.data;
     } catch (error) {
-        console.error("Error al actualizar:", error);
+        console.error("Error al actualizar ingreso:", error);
         throw error.response?.data || "Error al actualizar el registro";
     }
 };
