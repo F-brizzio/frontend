@@ -5,7 +5,7 @@ import { registrarIngreso } from '../services/ingresoService';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-// Constantes de negocio (Mejor mantenibilidad)
+// Constantes de negocio
 const IVA_RATE = 0.19; 
 
 export default function IngresoPage() {
@@ -16,8 +16,6 @@ export default function IngresoPage() {
     const [dbProducts, setDbProducts] = useState([]);
     const [areas, setAreas] = useState([]);
     const [proveedoresUnicos, setProveedoresUnicos] = useState([]);
-
-    // Estado de carga para evitar doble click
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [encabezado, setEncabezado] = useState({
@@ -27,29 +25,29 @@ export default function IngresoPage() {
         supplierName: ''
     });
 
+    // Validación derivada: ¿Está completa la sección 1?
+    const formularioListo = Boolean(
+        encabezado.fecha && 
+        encabezado.numeroDocumento && 
+        encabezado.supplierRut && 
+        encabezado.supplierName
+    );
+
     const [productoActual, setProductoActual] = useState({
-        sku: '', 
-        nombre: '', 
-        cantidad: '', 
-        precioUnitario: '', 
-        areaId: '',
-        categoria: '', 
-        unidadMedida: 'UNIDAD', 
-        stockMin: '', 
-        stockMax: '', 
-        diasMax: ''
+        sku: '', nombre: '', cantidad: '', precioUnitario: '', areaId: '',
+        categoria: '', unidadMedida: 'UNIDAD', stockMin: '', stockMax: '', diasMax: ''
     });
 
     const [esNuevoProducto, setEsNuevoProducto] = useState(false);
     const [listaProductos, setListaProductos] = useState([]);
     const [indexEditando, setIndexEditando] = useState(null);
     
-    // Estados para autocompletado
+    // Autocompletado
     const [sugerenciasProvNombre, setSugerenciasProvNombre] = useState([]);
     const [sugerenciasProvRut, setSugerenciasProvRut] = useState([]);
     const [sugerenciasSku, setSugerenciasSku] = useState([]);
 
-    // --- CARGA INICIAL OPTIMIZADA ---
+    // --- CARGA INICIAL ---
     useEffect(() => {
         async function load() {
             try {
@@ -57,29 +55,31 @@ export default function IngresoPage() {
                 setDbProducts(productosData);
                 setAreas(areasData);
 
-                // Lógica robusta para proveedores únicos
+                // SOLUCIÓN DUPLICADOS: Filtrar por NOMBRE único
                 const mapaProveedores = new Map();
                 productosData.forEach(prod => {
-                    if (prod.supplierRut && prod.supplierName) {
-                        const rutKey = prod.supplierRut.replace(/\./g, '').replace(/-/g, '').trim().toUpperCase();
-                        if (!mapaProveedores.has(rutKey)) {
-                            mapaProveedores.set(rutKey, { 
-                                rut: prod.supplierRut, 
-                                name: prod.supplierName.trim().toUpperCase() 
+                    if (prod.supplierName) {
+                        const nombreLimpio = prod.supplierName.trim().toUpperCase().replace(/\s+/g, ' ');
+                        if (!mapaProveedores.has(nombreLimpio)) {
+                            mapaProveedores.set(nombreLimpio, { 
+                                name: nombreLimpio,
+                                rut: prod.supplierRut || '' 
                             });
                         }
                     }
                 });
-                setProveedoresUnicos(Array.from(mapaProveedores.values()));
+                // Ordenar alfabéticamente
+                const listaOrdenada = Array.from(mapaProveedores.values()).sort((a, b) => a.name.localeCompare(b.name));
+                setProveedoresUnicos(listaOrdenada);
+
             } catch (e) { 
                 console.error("Error cargando datos:", e); 
-                alert("Error cargando catálogos. Por favor recargue la página.");
             }
         }
         load();
     }, []);
 
-    // --- CÁLCULOS EN TIEMPO REAL (Más eficiente que useEffect) ---
+    // --- CÁLCULOS ---
     const calculosActuales = useMemo(() => {
         const cant = parseFloat(productoActual.cantidad) || 0;
         const precio = parseFloat(productoActual.precioUnitario) || 0;
@@ -102,7 +102,7 @@ export default function IngresoPage() {
         if (name === 'sku') filtrarSkuPorProveedor(value);
     };
 
-    // --- FILTROS ---
+    // --- FILTROS Y SELECCIÓN ---
     const filtrarPorNombre = (txt) => {
         if (!txt) { setSugerenciasProvNombre([]); return; }
         setSugerenciasProvNombre(proveedoresUnicos.filter(p => p.name.includes(txt.toUpperCase())));
@@ -110,10 +110,9 @@ export default function IngresoPage() {
 
     const filtrarPorRut = (txt) => {
         if (!txt) { setSugerenciasProvRut([]); return; }
-        // Normalizamos input para buscar flexiblemente
         const inputLimpio = txt.replace(/\./g, '').replace(/-/g, '').toUpperCase();
         setSugerenciasProvRut(proveedoresUnicos.filter(p => {
-            const pRutLimpio = p.rut.replace(/\./g, '').replace(/-/g, '').toUpperCase();
+            const pRutLimpio = p.rut ? p.rut.replace(/\./g, '').replace(/-/g, '').toUpperCase() : '';
             return pRutLimpio.includes(inputLimpio);
         }));
     };
@@ -122,28 +121,25 @@ export default function IngresoPage() {
         setEncabezado(prev => ({ ...prev, supplierName: p.name, supplierRut: p.rut }));
         setSugerenciasProvNombre([]); 
         setSugerenciasProvRut([]);
-        // Opcional: Limpiar lista de productos si cambia el proveedor para evitar inconsistencias
+        // Si hay productos en la lista, advertir al usuario
         if(listaProductos.length > 0) {
-            if(!window.confirm("⚠️ Cambiar de proveedor podría generar inconsistencias con los productos ya agregados. ¿Desea continuar?")) {
-                return; // Revertir cambio si fuera necesario, o simplemente avisar.
-            }
+           // Aquí podrías limpiar la lista si fuera regla de negocio estricta
         }
     };
 
     const filtrarSkuPorProveedor = (txt) => {
         if (!txt || !encabezado.supplierRut) { setSugerenciasSku([]); return; }
         
-        // Normalizamos Rut del encabezado para filtrar correctamente
         const rutEncabezadoLimpio = encabezado.supplierRut.replace(/\./g, '').replace(/-/g, '').trim().toUpperCase();
 
         const coincidencias = dbProducts.filter(p => {
             if (!p.supplierRut) return false;
             const pRutLimpio = p.supplierRut.replace(/\./g, '').replace(/-/g, '').trim().toUpperCase();
+            // Compara RUT limpio y busca SKU parcial
             return pRutLimpio === rutEncabezadoLimpio && p.sku.toLowerCase().includes(txt.toLowerCase());
         });
 
         setSugerenciasSku(coincidencias);
-        // Determinamos si es nuevo basado en coincidencia exacta
         const existeExacto = coincidencias.find(p => p.sku.toLowerCase() === txt.toLowerCase());
         setEsNuevoProducto(!existeExacto);
     };
@@ -154,18 +150,20 @@ export default function IngresoPage() {
             sku: p.sku, 
             nombre: p.name, 
             categoria: p.category || '', 
-            unidadMedida: p.unitOfMeasure || 'UNIDAD',
-            // Si el producto ya tiene precio/area configurada en BD, podrías precargarlos aquí
+            unidadMedida: p.unitOfMeasure || 'UNIDAD'
         }));
         setEsNuevoProducto(false); 
         setSugerenciasSku([]);
     };
 
-    // --- LÓGICA DE AGREGAR/ACTUALIZAR ITEM ---
+    // --- AGREGAR ITEM ---
     const agregarOActualizarProducto = () => {
-        // Validaciones
+        if (!formularioListo) {
+            alert("⚠️ Primero debe completar todos los datos del Documento y Proveedor.");
+            return;
+        }
         if (!productoActual.sku || !productoActual.nombre || !productoActual.cantidad || !productoActual.precioUnitario || !productoActual.areaId) {
-            alert("⚠️ Faltan datos obligatorios (SKU, Nombre, Cantidad, Precio, Área)."); 
+            alert("⚠️ Faltan datos obligatorios del producto."); 
             return;
         }
 
@@ -173,8 +171,8 @@ export default function IngresoPage() {
         
         const nuevoItem = {
             ...productoActual,
-            cantidad: parseFloat(productoActual.cantidad), // Asegurar numérico
-            precioUnitario: parseFloat(productoActual.precioUnitario), // Asegurar numérico
+            cantidad: parseFloat(productoActual.cantidad),
+            precioUnitario: parseFloat(productoActual.precioUnitario),
             totalNeto: calculosActuales.neto,
             totalBruto: calculosActuales.bruto,
             areaNombre: areaSeleccionada ? areaSeleccionada.nombre : 'General',
@@ -182,22 +180,16 @@ export default function IngresoPage() {
         };
 
         if (indexEditando !== null) {
-            // Modo Edición
             const copia = [...listaProductos];
             copia[indexEditando] = nuevoItem;
             setListaProductos(copia);
             setIndexEditando(null);
         } else {
-            // Modo Agregar Nuevo
-            // VALIDACIÓN DE NEGOCIO: ¿El producto ya está en la tabla?
             const existeEnTabla = listaProductos.findIndex(item => item.sku === nuevoItem.sku);
-            
             if (existeEnTabla >= 0) {
-                alert(`⚠️ El SKU ${nuevoItem.sku} ya está en la lista. Edite la línea existente si desea modificar la cantidad.`);
-                // Opcional: Podrías sumar automáticamente las cantidades aquí si prefieres esa lógica.
+                alert(`⚠️ El SKU ${nuevoItem.sku} ya está en la lista. Edite la línea existente.`);
                 return;
             }
-
             setListaProductos([...listaProductos, nuevoItem]);
         }
         limpiarProductoActual();
@@ -211,28 +203,23 @@ export default function IngresoPage() {
 
     const editarItem = (index) => {
         setIndexEditando(index);
-        setProductoActual(listaProductos[index]); // Carga los datos al formulario
+        setProductoActual(listaProductos[index]);
     };
 
     const eliminarItem = (index) => {
-        if(window.confirm("¿Seguro que desea eliminar este ítem de la lista?")) {
+        if(window.confirm("¿Eliminar ítem?")) {
             setListaProductos(listaProductos.filter((_, i) => i !== index));
         }
     };
 
-    // --- CONFIRMACIÓN FINAL ---
     const confirmarIngreso = async () => {
-        if (!encabezado.numeroDocumento || !encabezado.supplierRut || listaProductos.length === 0) {
-            alert("⚠️ Faltan datos: Revise número de documento, proveedor y que existan productos en la lista."); 
+        if (!formularioListo || listaProductos.length === 0) {
+            alert("⚠️ Faltan datos o productos."); 
             return;
         }
+        if(!window.confirm("¿Confirmar ingreso de mercadería?")) return;
 
-        if(!window.confirm("¿Está seguro de procesar este ingreso? Esta acción afectará el stock.")){
-            return;
-        }
-
-        setIsSubmitting(true); // Bloqueamos botón
-
+        setIsSubmitting(true);
         const payload = {
             ...encabezado,
             responsable: user?.fullName || "Usuario",
@@ -250,24 +237,22 @@ export default function IngresoPage() {
         try {
             await registrarIngreso(payload);
             alert("✅ Ingreso Exitoso!");
-            // Limpieza total
             setListaProductos([]);
             setEncabezado({ fecha: new Date().toISOString().split('T')[0], numeroDocumento: '', supplierRut: '', supplierName: '' });
             limpiarProductoActual();
         } catch (error) { 
             console.error(error);
-            alert("❌ Error al registrar: " + (error.response?.data?.message || error.message)); 
+            alert("❌ Error: " + (error.response?.data?.message || error.message)); 
         } finally {
-            setIsSubmitting(false); // Desbloqueamos botón
+            setIsSubmitting(false);
         }
     };
 
-    // Totales Globales
+    // Totales
     const totalNetoGlobal = listaProductos.reduce((acc, item) => acc + item.totalNeto, 0);
     const totalBrutoGlobal = listaProductos.reduce((acc, item) => acc + item.totalBruto, 0);
     const totalIvaGlobal = totalBrutoGlobal - totalNetoGlobal;
 
-    // --- RENDER ---
     return (
         <div className="inventory-container" style={{padding: '20px', backgroundColor: '#f4f7f6'}}>
             <div className="page-header" style={{display: 'flex', justifyContent: 'space-between', marginBottom: '20px'}}>
@@ -275,51 +260,70 @@ export default function IngresoPage() {
                 <button onClick={() => navigate('/menu')} className="back-btn" style={{padding: '8px 16px', cursor:'pointer'}}>⬅ Volver</button>
             </div>
 
-            {/* 1. DATOS DEL DOCUMENTO */}
+            {/* SECCIÓN 1: DOCUMENTO */}
             <div className="form-card" style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px', borderTop: '4px solid #3182ce' }}>
                 <h3 style={{marginTop: 0, marginBottom: '15px', fontSize: '1.1rem', color: '#3182ce'}}>1. Información del Documento y Proveedor</h3>
                 <div className="form-grid" style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px'}}>
                     <div className="form-group"><label>Fecha</label><input type="date" name="fecha" value={encabezado.fecha} onChange={handleEncabezadoChange} className="form-input"/></div>
                     <div className="form-group"><label>N° Factura / Documento</label><input type="text" name="numeroDocumento" value={encabezado.numeroDocumento} onChange={handleEncabezadoChange} className="form-input" placeholder="Ej: 10234"/></div>
                     
-                    {/* Buscador Proveedor Nombre */}
+                    {/* Buscador Nombre */}
                     <div className="form-group" style={{position:'relative'}}>
                         <label>Nombre Proveedor</label>
-                        <input type="text" name="supplierName" value={encabezado.supplierName} onChange={handleEncabezadoChange} className="form-input" placeholder="Escriba nombre..." autoComplete="off"/>
+                        <input type="text" name="supplierName" value={encabezado.supplierName} onChange={handleEncabezadoChange} className="form-input" placeholder="Buscar..." autoComplete="off"/>
                         {sugerenciasProvNombre.length > 0 && <ul className="dropdown-list" style={{position:'absolute', width:'100%', zIndex:100, background:'white', border:'1px solid #ddd', listStyle:'none', padding:0, maxHeight:'200px', overflowY:'auto', boxShadow:'0 4px 6px rgba(0,0,0,0.1)'}}>{sugerenciasProvNombre.map((p,i)=><li key={i} onClick={()=>seleccionarProveedor(p)} style={{padding:'8px', cursor:'pointer', borderBottom:'1px solid #eee', fontSize:'0.9rem'}}>{p.name}</li>)}</ul>}
                     </div>
                     
-                    {/* Buscador Proveedor RUT */}
+                    {/* Buscador RUT */}
                     <div className="form-group" style={{position:'relative'}}>
                         <label>RUT Proveedor</label>
-                        <input type="text" name="supplierRut" value={encabezado.supplierRut} onChange={handleEncabezadoChange} className="form-input" placeholder="Escriba RUT..." autoComplete="off"/>
+                        <input type="text" name="supplierRut" value={encabezado.supplierRut} onChange={handleEncabezadoChange} className="form-input" placeholder="Buscar RUT..." autoComplete="off"/>
                         {sugerenciasProvRut.length > 0 && <ul className="dropdown-list" style={{position:'absolute', width:'100%', zIndex:100, background:'white', border:'1px solid #ddd', listStyle:'none', padding:0, maxHeight:'200px', overflowY:'auto', boxShadow:'0 4px 6px rgba(0,0,0,0.1)'}}>{sugerenciasProvRut.map((p,i)=><li key={i} onClick={()=>seleccionarProveedor(p)} style={{padding:'8px', cursor:'pointer', borderBottom:'1px solid #eee', fontSize:'0.9rem'}}>{p.rut} - {p.name}</li>)}</ul>}
                     </div>
                 </div>
             </div>
 
-            {/* 2. AGREGAR ITEM */}
-            <div className="form-card" style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px', borderTop: '4px solid #38a169' }}>
-                <h3 style={{marginTop: 0, marginBottom: '15px', fontSize: '1.1rem', color: '#38a169'}}>{indexEditando !== null ? "✏️ Editando Item" : "2. Datos del Producto"}</h3>
+            {/* SECCIÓN 2: PRODUCTO (CON BLOQUEO DE VALIDACIÓN) */}
+            <div className="form-card" style={{ 
+                background: 'white', 
+                padding: '20px', 
+                borderRadius: '8px', 
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)', 
+                marginBottom: '20px', 
+                borderTop: '4px solid #38a169',
+                opacity: formularioListo ? 1 : 0.6, // Efecto visual de deshabilitado
+                pointerEvents: formularioListo ? 'auto' : 'none' // Bloqueo de clics
+            }}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '15px'}}>
+                    <h3 style={{margin:0, fontSize: '1.1rem', color: '#38a169'}}>
+                        {indexEditando !== null ? "✏️ Editando Item" : "2. Datos del Producto"}
+                    </h3>
+                    {/* Mensaje de alerta si está bloqueado */}
+                    {!formularioListo && (
+                        <span style={{color: '#e53e3e', fontWeight:'bold', fontSize:'0.9rem'}}>
+                            🔒 Complete el Documento y Proveedor para desbloquear
+                        </span>
+                    )}
+                </div>
+
                 <div className="form-grid" style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px'}}>
                     <div className="form-group" style={{position:'relative'}}>
-                        <label>SKU {encabezado.supplierRut ? "" : "(Seleccione Proveedor primero)"}</label>
-                        <input type="text" name="sku" value={productoActual.sku} onChange={handleProductoChange} className="form-input" disabled={!encabezado.supplierRut} placeholder={!encabezado.supplierRut ? "Bloqueado" : "Buscar SKU..."} autoComplete="off"/>
-                        {sugerenciasSku.length > 0 && <ul className="dropdown-list" style={{position:'absolute', width:'100%', zIndex:100, background:'white', border:'1px solid #ddd', listStyle:'none', padding:0, maxHeight:'200px', overflowY:'auto', boxShadow:'0 4px 6px rgba(0,0,0,0.1)'}}>{sugerenciasSku.map((p,i)=><li key={i} onClick={()=>seleccionarSku(p)} style={{padding:'8px', cursor:'pointer', borderBottom:'1px solid #eee', fontSize:'0.9rem'}}>{p.sku} - {p.name}</li>)}</ul>}
+                        <label>SKU</label>
+                        <input type="text" name="sku" value={productoActual.sku} onChange={handleProductoChange} className="form-input" disabled={!formularioListo} placeholder={formularioListo ? "Buscar SKU..." : "Bloqueado"} autoComplete="off"/>
+                        {sugerenciasSku.length > 0 && formularioListo && <ul className="dropdown-list" style={{position:'absolute', width:'100%', zIndex:100, background:'white', border:'1px solid #ddd', listStyle:'none', padding:0, maxHeight:'200px', overflowY:'auto', boxShadow:'0 4px 6px rgba(0,0,0,0.1)'}}>{sugerenciasSku.map((p,i)=><li key={i} onClick={()=>seleccionarSku(p)} style={{padding:'8px', cursor:'pointer', borderBottom:'1px solid #eee', fontSize:'0.9rem'}}>{p.sku} - {p.name}</li>)}</ul>}
                     </div>
-                    <div className="form-group"><label>Nombre</label><input type="text" name="nombre" value={productoActual.nombre} onChange={handleProductoChange} className="form-input" readOnly={!esNuevoProducto}/></div>
-                    <div className="form-group"><label>Área Destino</label><select name="areaId" value={productoActual.areaId} onChange={handleProductoChange} className="form-input"><option value="">Seleccione...</option>{areas.map(a=><option key={a.id} value={a.id}>{a.nombre}</option>)}</select></div>
-                    <div className="form-group"><label>Cantidad</label><input type="number" name="cantidad" value={productoActual.cantidad} onChange={handleProductoChange} className="form-input" min="0"/></div>
-                    <div className="form-group"><label>Precio Neto Unit.</label><input type="number" name="precioUnitario" value={productoActual.precioUnitario} onChange={handleProductoChange} className="form-input" min="0"/></div>
+                    <div className="form-group"><label>Nombre</label><input type="text" name="nombre" value={productoActual.nombre} onChange={handleProductoChange} className="form-input" readOnly={!esNuevoProducto} disabled={!formularioListo}/></div>
+                    <div className="form-group"><label>Área Destino</label><select name="areaId" value={productoActual.areaId} onChange={handleProductoChange} className="form-input" disabled={!formularioListo}><option value="">Seleccione...</option>{areas.map(a=><option key={a.id} value={a.id}>{a.nombre}</option>)}</select></div>
+                    <div className="form-group"><label>Cantidad</label><input type="number" name="cantidad" value={productoActual.cantidad} onChange={handleProductoChange} className="form-input" min="0" disabled={!formularioListo}/></div>
+                    <div className="form-group"><label>Precio Neto Unit.</label><input type="number" name="precioUnitario" value={productoActual.precioUnitario} onChange={handleProductoChange} className="form-input" min="0" disabled={!formularioListo}/></div>
                     
-                    {/* Visualización rápida de totales parciales */}
                     <div className="form-group" style={{display:'flex', alignItems:'flex-end', paddingBottom:'5px', color:'#718096', fontSize:'0.9rem'}}>
-                       Subtotal Item: ${calculosActuales.neto.toLocaleString('es-CL')} (Neto)
+                       Subtotal Item: ${calculosActuales.neto.toLocaleString('es-CL')}
                     </div>
                 </div>
                 <div style={{marginTop: '15px', textAlign: 'right'}}>
                     {indexEditando !== null && <button onClick={limpiarProductoActual} className="btn-secondary" style={{marginRight: '10px', padding:'8px 16px', cursor:'pointer'}}>Cancelar</button>}
-                    <button onClick={agregarOActualizarProducto} className="save-btn" style={{backgroundColor: '#2b6cb0', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>
+                    <button onClick={agregarOActualizarProducto} disabled={!formularioListo} className="save-btn" style={{backgroundColor: formularioListo ? '#2b6cb0' : '#a0aec0', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: formularioListo ? 'pointer' : 'not-allowed'}}>
                         {indexEditando !== null ? "💾 Actualizar Item" : "➕ Agregar Item"}
                     </button>
                 </div>
@@ -384,22 +388,7 @@ export default function IngresoPage() {
                     </div>
 
                     <div style={{textAlign: 'center', marginTop: '30px'}}>
-                        <button 
-                            onClick={confirmarIngreso} 
-                            disabled={isSubmitting}
-                            className="save-btn" 
-                            style={{
-                                padding: '15px 50px', 
-                                backgroundColor: isSubmitting ? '#a0aec0' : '#38a169', 
-                                color: 'white', 
-                                borderRadius: '8px', 
-                                fontSize: '1.1rem', 
-                                fontWeight: 'bold', 
-                                border: 'none', 
-                                cursor: isSubmitting ? 'not-allowed' : 'pointer', 
-                                boxShadow: '0 4px 10px rgba(56, 161, 105, 0.3)'
-                            }}
-                        >
+                        <button onClick={confirmarIngreso} disabled={isSubmitting} className="save-btn" style={{padding: '15px 50px', backgroundColor: isSubmitting ? '#a0aec0' : '#38a169', color: 'white', borderRadius: '8px', fontSize: '1.1rem', fontWeight: 'bold', border: 'none', cursor: isSubmitting ? 'not-allowed' : 'pointer', boxShadow: '0 4px 10px rgba(56, 161, 105, 0.3)'}}>
                             {isSubmitting ? "⏳ Procesando..." : "✅ CONFIRMAR INGRESO DE MERCADERÍA"}
                         </button>
                     </div>

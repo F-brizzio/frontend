@@ -1,34 +1,19 @@
 import api from './api';
 
-// 1. Registrar un INGRESO MASIVO (Formato Factura)
-export const registrarIngreso = async (ingresoData) => {
-    try {
-        const response = await api.post('/api/ingresos', ingresoData);
-        return response.data;
-    } catch (error) {
-        console.error("Error en servicio de ingreso:", error);
-        throw error.response?.data || "Error desconocido al registrar el ingreso";
-    }
-};
-
-// 2. Obtener el historial completo
+// Coincide con @GetMapping("/historial") dentro de @RequestMapping("/api/ingresos")
 export const getHistorialIngresos = async () => {
-    try {
-        const response = await api.get('/api/ingresos/historial'); 
-        return response.data;
-    } catch (error) {
-        console.error("Error al obtener historial:", error);
-        throw error.response?.data || "Error al cargar historial";
-    }
+    const response = await api.get('/api/ingresos/historial');
+    return response.data;
 };
 
-// 3. Actualizar un registro del historial (ESTA ES LA QUE FALTA)
-export const actualizarIngresoItem = async (id, data) => {
-    try {
-        const response = await api.put(`/api/ingresos/${id}`, data);
-        return response.data;
-    } catch (error) {
-        console.error("Error al actualizar ingreso:", error);
-        throw error.response?.data || "Error al actualizar el registro";
-    }
+// Coincide con @PutMapping("/{id}") dentro de @RequestMapping("/api/ingresos")
+export const actualizarIngresoItem = async (id, datosActualizados) => {
+    const response = await api.put(`/api/ingresos/${id}`, datosActualizados);
+    return response.data;
+};
+
+// Esta función se usa para el registro inicial (POST)
+export const registrarIngreso = async (payload) => {
+    const response = await api.post('/api/ingresos', payload);
+    return response.data;
 };
