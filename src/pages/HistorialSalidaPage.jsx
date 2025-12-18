@@ -27,17 +27,30 @@ export default function HistorialSalidaPage() {
     const cargarDatos = async () => {
         try {
             const dataFlat = await getSalidas(); 
+            
+            // Debug: Ver qué llega del backend
+            console.log("Datos recibidos del backend:", dataFlat);
 
-            // Agrupación Cliente
+            // Agrupación por Folio
             const grupos = {};
+            
             dataFlat.forEach(item => {
+                // Generar ID único para agrupación
                 const key = item.folio || `S/F-${item.fecha}-${item.id}`;
+
+                // Mapeo de campos (Backend Java -> Frontend React)
+                // El backend manda: 'origen', 'producto', 'sku', 'destino'
+                const itemOrigen = item.origen || item.areaOrigen || 'Desconocido';
+                const itemProducto = item.producto || item.productName;
+                const itemSku = item.sku || item.productSku;
+                const itemDestino = item.destino || item.areaDestino || 'Consumo Interno';
 
                 if (!grupos[key]) {
                     grupos[key] = {
                         folio: item.folio || 'S/F',
                         fecha: item.fecha,
-                        areaOrigen: item.areaOrigen,
+                        areaOrigen: itemOrigen, // Inicializamos con el origen del primer item
+                        esMultiOrigen: false,   // Bandera para saber si es mixta
                         responsable: item.usuarioResponsable || 'Sistema',
                         cantidadItems: 0, 
                         totalUnidades: 0,
@@ -46,13 +59,27 @@ export default function HistorialSalidaPage() {
                     };
                 }
 
+                // Lógica para detectar "GENERAL" (Varios orígenes en un mismo folio)
+                if (grupos[key].areaOrigen !== 'VARIOS' && grupos[key].areaOrigen !== itemOrigen) {
+                    grupos[key].areaOrigen = 'VARIOS / GENERAL'; // Marcamos visualmente
+                    grupos[key].esMultiOrigen = true;
+                }
+
                 grupos[key].cantidadItems += 1;
                 grupos[key].totalUnidades += item.cantidad;
                 if (item.tipoSalida === 'MERMA') grupos[key].tieneMermas = true;
                 
-                grupos[key].detalles.push(item);
+                // Guardamos el detalle con los nombres normalizados
+                grupos[key].detalles.push({
+                    ...item,
+                    productName: itemProducto,
+                    productSku: itemSku,
+                    areaOrigen: itemOrigen,
+                    areaDestino: itemDestino
+                });
             });
 
+            // Convertir objeto a array y ordenar por fecha descendente
             const listaOrdenada = Object.values(grupos).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
             setHistorialAgrupado(listaOrdenada);
 
@@ -98,6 +125,7 @@ export default function HistorialSalidaPage() {
             SKU: m.productSku,
             Producto: m.productName,
             Cantidad: m.cantidad,
+            "Área Origen": m.areaOrigen,
             "Área Destino": m.areaDestino,
             Responsable: m.usuarioResponsable
         })));
@@ -182,7 +210,14 @@ export default function HistorialSalidaPage() {
                                 <tr key={i}>
                                     <td data-label="Fecha">{g.fecha}</td>
                                     <td data-label="Folio" style={{ fontWeight: 'bold' }}>{g.folio}</td>
-                                    <td data-label="Origen">{g.areaOrigen}</td>
+                                    <td data-label="Origen">
+                                        {/* Si es multi-origen, lo mostramos en azulito o negrita */}
+                                        {g.esMultiOrigen ? (
+                                            <span style={{ color: '#2b6cb0', fontWeight: 'bold' }}>🏢 VARIOS / GENERAL</span>
+                                        ) : (
+                                            g.areaOrigen
+                                        )}
+                                    </td>
                                     <td data-label="Responsable">
                                         <span className="badge-category">{g.responsable}</span>
                                     </td>
@@ -241,6 +276,8 @@ export default function HistorialSalidaPage() {
                                         <th>Tipo</th>
                                         <th>Producto</th>
                                         <th>SKU</th>
+                                        {/* AÑADIDO: Columna Origen para ver de dónde salió cada item */}
+                                        <th>Origen</th> 
                                         <th>Destino</th>
                                         <th style={{textAlign:'right'}}>Cantidad</th>
                                     </tr>
@@ -259,7 +296,11 @@ export default function HistorialSalidaPage() {
                                             </td>
                                             <td data-label="Producto"><strong>{d.productName}</strong></td>
                                             <td data-label="SKU" style={{ color:'#718096', fontSize:'0.9em' }}>{d.productSku}</td>
-                                            <td data-label="Destino">{d.areaDestino || d.areaOrigen}</td>
+                                            
+                                            {/* DATOS DE ORIGEN Y DESTINO */}
+                                            <td data-label="Origen" style={{ fontSize:'0.9em', color:'#4a5568' }}>{d.areaOrigen}</td>
+                                            <td data-label="Destino" style={{ fontSize:'0.9em', color:'#4a5568' }}>{d.areaDestino}</td>
+                                            
                                             <td data-label="Cantidad" style={{ textAlign: 'right', fontWeight:'bold' }}>{d.cantidad}</td>
                                         </tr>
                                     ))}

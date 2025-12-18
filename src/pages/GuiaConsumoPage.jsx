@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { getAreas } from '../services/areaService';
-import { getStockByArea, getAllStock } from '../services/inventoryService'; // Asegúrate de tener getAllStock o usar getStockByArea para todas
-import { procesarGuiaConsumo } from '../services/salidaService'; 
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext'; 
 
-// Estilos simples para la lista de sugerencias
+// SERVICIOS
+import { getAreas } from '../services/areaService';
+import { getStockByArea, getAllStock } from '../services/inventoryService'; 
+import { procesarGuiaConsumo } from '../services/salidaService'; 
+
+// Estilos para el autocompletado flotante
 const suggestionsStyle = {
     position: 'absolute',
     top: '100%',
@@ -58,6 +60,8 @@ export default function GuiaConsumoPage() {
     const handleOrigenChange = async (e) => {
         const id = e.target.value;
         setAreaOrigenId(id);
+        
+        // Resetear formulario de producto
         setProductoSeleccionado(null);
         setBusqueda('');
         setSugerencias([]);
@@ -66,19 +70,15 @@ export default function GuiaConsumoPage() {
         if (!id) return;
 
         // Detectar si es la opción especial "GENERAL"
-        // NOTA: Debes decidir si "GENERAL" es un ID específico (ej: 999) o una opción hardcodeada.
-        // Aquí asumo que creamos una opción manual en el <select> con valor "GENERAL_MODE"
         if (id === 'GENERAL_MODE') {
             setEsModoGeneral(true);
             try {
-                // Necesitas un servicio que traiga TODO el stock de todas las áreas
-                // Si no lo tienes, podrías llamar a getStockByArea para cada área y unirlos, 
-                // pero lo ideal es un endpoint: /inventory/all-stock
-                const allStock = await getAllStock(); // O implementa esta llamada
+                // Llama a la función getAllStock que definimos en inventoryService.js
+                const allStock = await getAllStock(); 
                 setInventarioDisponible(allStock);
             } catch (error) {
                 console.error("Error cargando todo el stock", error);
-                alert("Error cargando inventario general");
+                alert("Error al cargar el inventario general. Revisa la consola.");
             }
         } else {
             setEsModoGeneral(false);
@@ -116,8 +116,9 @@ export default function GuiaConsumoPage() {
         setProductoSeleccionado(item);
         setBusqueda(`${item.productName || item.nombreProducto} (${item.sku || item.productSku})`);
         setSugerencias([]);
-        // Enfocar el input de cantidad automáticamente podría ser útil aquí
-        document.getElementById('inputCantidad').focus();
+        // Enfocar el input de cantidad automáticamente
+        const inputCant = document.getElementById('inputCantidad');
+        if(inputCant) inputCant.focus();
     };
 
     // 4. Agregar al Carrito
@@ -144,22 +145,22 @@ export default function GuiaConsumoPage() {
         }
 
         const nuevoItem = {
-            uniqueId: Date.now(), // ID temporal para la lista
+            uniqueId: Date.now(), // ID temporal para la lista visual
             productSku: productoSeleccionado.sku || productoSeleccionado.productSku,
             productName: productoSeleccionado.productName || productoSeleccionado.nombreProducto,
             cantidad: cant,
-            // Si es modo general, el origen real es el área del producto seleccionado, no "General"
+            // Si es modo general, el origen real es el área del producto seleccionado
             areaOrigenRealId: esModoGeneral ? productoSeleccionado.areaId : Number(areaOrigenId),
             nombreAreaOrigen: esModoGeneral ? (productoSeleccionado.nombreArea || 'Varios') : areas.find(a => a.id === Number(areaOrigenId))?.nombre,
             areaDestinoId: destinoIdFinal,
             nombreAreaDestino: nombreDestino,
-            costoUnitario: productoSeleccionado.costoPromedio || productoSeleccionado.costo || 0, // Asegúrate que el back traiga el costo
+            costoUnitario: productoSeleccionado.costoPromedio || productoSeleccionado.costo || 0,
             tipo: tipoMovimiento
         };
 
         setCarrito([...carrito, nuevoItem]);
         
-        // Resetear campos de entrada
+        // Resetear campos de entrada para el siguiente producto
         setBusqueda('');
         setCantidadInput('');
         setProductoSeleccionado(null);
@@ -177,20 +178,10 @@ export default function GuiaConsumoPage() {
 
         setCargando(true);
         try {
-            // Construimos el payload. 
-            // NOTA: Como en modo GENERAL cada item puede tener un origen distinto, 
-            // tal vez debas ajustar tu backend para recibir una lista mixta, 
-            // o agrupar aquí. Asumiremos que el backend soporta detalles con origen específico 
-            // o que enviaremos la cabecera como 'General' y el detalle manda.
-            
-            // Si tu backend es estricto (1 Guía = 1 Origen), el modo GENERAL debería 
-            // generar múltiples guías o tu backend debe evolucionar.
-            // Por ahora, enviaré el estructura estándar.
-
             const payload = {
                 fecha: fechaGuia,
-                areaOrigenId: esModoGeneral ? null : Number(areaOrigenId), // null podría indicar 'Multi' al backend
-                esMultiOrigen: esModoGeneral, // Flag útil para el backend
+                areaOrigenId: esModoGeneral ? null : Number(areaOrigenId), 
+                esMultiOrigen: esModoGeneral, 
                 responsable: user?.fullName || 'Sistema',
                 detalles: carrito.map(item => ({
                     productSku: item.productSku,
