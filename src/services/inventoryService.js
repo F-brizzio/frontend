@@ -1,20 +1,36 @@
-// src/services/inventoryService.js
-import api from './api'; // <--- Importamos tu configuración de Axios (la que tiene la URL de la nube)
+import api from './api'; // Asegúrate de importar tu instancia de axios configurada
 
+// 1. Para la página de Inventario General (La tabla grande)
 export const getInventarioCompleto = async () => {
     try {
-        // YA NO USAMOS localhost NI fetch.
-        // Usamos api.get. Axios ya sabe que la base es https://gestion.centroelagora.cl
-        // Solo ponemos la parte final de la ruta.
-        
-        // Ajusta '/inventory/completo' según tu Controller en Java 
-        // (Si en Java es @RequestMapping("/api/inventory"), entonces aquí pon '/inventory/completo')
-        const response = await api.get('/inventory/completo'); 
-        
-        // Con axios, los datos vienen directo en response.data
-        return response.data; 
+        const response = await api.get('/inventory/completo');
+        return response.data;
     } catch (error) {
         console.error("Error en getInventarioCompleto:", error);
+        throw error;
+    }
+};
+
+// 2. Para la Guía de Consumo (El error que te salía: getAllStock)
+// Nota: Usamos el mismo endpoint que el inventario completo porque necesitamos buscar en todo.
+export const getAllStock = async () => {
+    try {
+        const response = await api.get('/inventory/completo');
+        return response.data;
+    } catch (error) {
+        console.error("Error en getAllStock:", error);
+        throw error;
+    }
+};
+
+// 3. Para buscar stock solo de un área específica (Tambien lo pide tu página)
+export const getStockByArea = async (areaId) => {
+    try {
+        // Asegúrate de que en tu Java (Backend) tengas un endpoint tipo: @GetMapping("/area/{id}")
+        const response = await api.get(`/inventory/area/${areaId}`);
+        return response.data;
+    } catch (error) {
+        console.error(`Error en getStockByArea (ID: ${areaId}):`, error);
         throw error;
     }
 };
