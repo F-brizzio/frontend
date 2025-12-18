@@ -10,30 +10,35 @@ export default function GuiaConsumoPage() {
     // --- ESTADOS ---
     const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
     const [areaOrigen, setAreaOrigen] = useState('');
-    const [tipoSalida, setTipoSalida] = useState('CONSUMO'); // CONSUMO o MERMA
+    const [tipoSalida, setTipoSalida] = useState('CONSUMO');
     
-    // Listas de datos
+    // Inicializamos como arrays vacíos para evitar errores de .map
     const [listaAreas, setListaAreas] = useState([]);
     const [inventario, setInventario] = useState([]);
 
-    // Estados para el formulario de agregar producto
     const [productoSeleccionado, setProductoSeleccionado] = useState('');
     const [cantidadInput, setCantidadInput] = useState('');
-    
-    // Lista de productos agregados a la guía
     const [detalles, setDetalles] = useState([]);
 
-    // --- CARGAR DATOS INICIALES ---
+    // --- CARGAR DATOS ---
     useEffect(() => {
         cargarDatos();
     }, []);
 
     const cargarDatos = async () => {
         try {
-            const areas = await getAreas();
-            setListaAreas(areas);
-            const stocks = await getAllStock();
-            setInventario(stocks);
+            console.log("Cargando datos...");
+            
+            const areasData = await getAreas();
+            console.log("Areas recibidas:", areasData);
+            // Validación de seguridad: si no es array, forzamos array vacío
+            setListaAreas(Array.isArray(areasData) ? areasData : []);
+
+            const stocksData = await getAllStock();
+            console.log("Inventario recibido:", stocksData);
+            // Validación de seguridad
+            setInventario(Array.isArray(stocksData) ? stocksData : []);
+
         } catch (error) {
             console.error("Error cargando datos:", error);
         }
@@ -44,6 +49,7 @@ export default function GuiaConsumoPage() {
         if (!productoSeleccionado || !cantidadInput) return alert("Falta producto o cantidad");
         if (parseFloat(cantidadInput) <= 0) return alert("La cantidad debe ser mayor a 0");
 
+        // Búsqueda segura
         const prodInfo = inventario.find(p => p.productSku === productoSeleccionado);
 
         const nuevoItem = {
@@ -56,8 +62,6 @@ export default function GuiaConsumoPage() {
         };
 
         setDetalles([...detalles, nuevoItem]);
-        
-        // Limpiar inputs pequeños
         setProductoSeleccionado('');
         setCantidadInput('');
     };
@@ -75,7 +79,7 @@ export default function GuiaConsumoPage() {
         const guiaDto = {
             areaOrigenId: areaOrigen,
             fecha: fecha,
-            responsable: "Usuario Actual", // Podrías sacarlo del localStorage
+            responsable: "Usuario Actual", 
             detalles: detalles
         };
 
@@ -92,16 +96,13 @@ export default function GuiaConsumoPage() {
     return (
         <div style={{ padding: '2rem', backgroundColor: '#f7fafc', minHeight: '100vh' }}>
             
-            {/* TÍTULO DE LA PÁGINA */}
             <div style={{ maxWidth: '900px', margin: '0 auto 1.5rem auto' }}>
                 <h2 style={{ color: '#2d3748', fontSize: '1.8rem' }}>📋 Nueva Guía de Salida</h2>
-                <p style={{ color: '#718096' }}>Registra consumos internos o mermas de inventario.</p>
             </div>
 
-            {/* TARJETA PRINCIPAL (Usa tu clase .form-card) */}
             <div className="form-card">
                 
-                {/* 1. DATOS GENERALES (Usa tu clase .form-grid) */}
+                {/* 1. DATOS GENERALES */}
                 <div className="form-grid">
                     <div className="form-group">
                         <label className="form-label">Fecha de Emisión</label>
@@ -121,7 +122,8 @@ export default function GuiaConsumoPage() {
                             onChange={(e) => setAreaOrigen(e.target.value)}
                         >
                             <option value="">-- Seleccionar --</option>
-                            {listaAreas.map(area => (
+                            {/* PROTECCIÓN: (listaAreas || []) asegura que siempre haya algo que mapear */}
+                            {(listaAreas || []).map(area => (
                                 <option key={area.id} value={area.id}>{area.nombre}</option>
                             ))}
                         </select>
@@ -149,7 +151,6 @@ export default function GuiaConsumoPage() {
                 {/* 2. AGREGAR PRODUCTOS */}
                 <h4 style={{ marginBottom: '1rem', color: '#4a5568' }}>Agregar Productos</h4>
                 
-                {/* Usamos form-grid pero ajustamos columnas inline para que el botón quede bien */}
                 <div className="form-grid" style={{ gridTemplateColumns: '2fr 1fr auto', alignItems: 'end' }}>
                     
                     <div className="form-group">
@@ -160,12 +161,12 @@ export default function GuiaConsumoPage() {
                             onChange={(e) => setProductoSeleccionado(e.target.value)}
                         >
                             <option value="">-- Selecciona Producto --</option>
-                            {/* Filtramos duplicados por SKU visualmente */}
-                            {[...new Set(inventario.map(item => item.productSku))].map(sku => {
+                            {/* PROTECCIÓN: Verificamos que inventario sea un array antes de mapear */}
+                            {Array.isArray(inventario) && [...new Set(inventario.map(item => item.productSku))].map(sku => {
                                 const item = inventario.find(p => p.productSku === sku);
                                 return (
                                     <option key={sku} value={sku}>
-                                        {item.productName} ({sku})
+                                        {item ? item.productName : 'Producto'} ({sku})
                                     </option>
                                 );
                             })}
@@ -197,10 +198,10 @@ export default function GuiaConsumoPage() {
                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
                         <thead>
                             <tr style={{ backgroundColor: '#edf2f7', textAlign: 'left' }}>
-                                <th style={{ padding: '12px', borderRadius: '8px 0 0 8px', color: '#4a5568' }}>Producto</th>
+                                <th style={{ padding: '12px', color: '#4a5568' }}>Producto</th>
                                 <th style={{ padding: '12px', color: '#4a5568' }}>Tipo</th>
                                 <th style={{ padding: '12px', textAlign: 'right', color: '#4a5568' }}>Cantidad</th>
-                                <th style={{ padding: '12px', borderRadius: '0 8px 8px 0', textAlign: 'center', color: '#4a5568' }}>Acción</th>
+                                <th style={{ padding: '12px', textAlign: 'center', color: '#4a5568' }}>Acción</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -221,15 +222,13 @@ export default function GuiaConsumoPage() {
                                             <span style={{ 
                                                 padding: '4px 8px', 
                                                 borderRadius: '6px', 
-                                                fontSize: '0.85rem',
-                                                fontWeight: 'bold',
                                                 backgroundColor: d.tipoSalida === 'CONSUMO' ? '#c6f6d5' : '#fed7d7',
                                                 color: d.tipoSalida === 'CONSUMO' ? '#22543d' : '#822727'
                                             }}>
                                                 {d.tipoSalida}
                                             </span>
                                         </td>
-                                        <td style={{ padding: '12px', textAlign: 'right', fontWeight: 'bold' }}>
+                                        <td style={{ padding: '12px', textAlign: 'right' }}>
                                             {d.cantidad} {d.unidad}
                                         </td>
                                         <td style={{ padding: '12px', textAlign: 'center' }}>
@@ -247,7 +246,6 @@ export default function GuiaConsumoPage() {
                     </table>
                 </div>
 
-                {/* 4. ACCIONES (Usa tu clase .form-actions) */}
                 <div className="form-actions">
                     <button onClick={() => navigate('/menu')} className="btn-secondary">
                         Cancelar
@@ -260,7 +258,6 @@ export default function GuiaConsumoPage() {
                         💾 Guardar Guía
                     </button>
                 </div>
-
             </div>
         </div>
     );
