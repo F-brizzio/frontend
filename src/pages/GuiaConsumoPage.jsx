@@ -1,367 +1,457 @@
 import { useState, useEffect } from 'react';
 import { getAreas } from '../services/areaService';
-import { getStockByArea } from '../services/inventoryService';
+import { getStockByArea, getAllStock } from '../services/inventoryService'; // Asegúrate de tener getAllStock o usar getStockByArea para todas
 import { procesarGuiaConsumo } from '../services/salidaService'; 
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext'; 
 
+// Estilos simples para la lista de sugerencias
+const suggestionsStyle = {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    border: '1px solid #cbd5e0',
+    borderRadius: '0 0 4px 4px',
+    background: 'white',
+    maxHeight: '200px',
+    overflowY: 'auto',
+    boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+};
+
 export default function GuiaConsumoPage() {
     const navigate = useNavigate();
-    const { user } = useAuth(); 
+    const { user } = useAuth();
 
-    // --- ESTADOS ---
+    // --- ESTADOS PRINCIPALES ---
     const [areas, setAreas] = useState([]);
-    const [areaOrigen, setAreaOrigen] = useState('');
-    const [nombreAreaOrigen, setNombreAreaOrigen] = useState('');
-    const [stockList, setStockList] = useState([]); 
-    const [filtro, setFiltro] = useState('');
+    
+    // Cabecera de la Guía
     const [fechaGuia, setFechaGuia] = useState(new Date().toISOString().split('T')[0]);
+    const [areaOrigenId, setAreaOrigenId] = useState('');
+    const [tipoMovimiento, setTipoMovimiento] = useState('CONSUMO'); // CONSUMO o MERMA
+    
+    // Estado del Inventario disponible para buscar
+    const [inventarioDisponible, setInventarioDisponible] = useState([]);
+    const [esModoGeneral, setEsModoGeneral] = useState(false);
 
-    // CARRITO
-    const [seleccionados, setSeleccionados] = useState({});
-    const [permiteMerma, setPermiteMerma] = useState(false);
-    const [mostrarResumen, setMostrarResumen] = useState(false);
+    // Formulario de "Agregar Item"
+    const [busqueda, setBusqueda] = useState('');
+    const [sugerencias, setSugerencias] = useState([]);
+    const [productoSeleccionado, setProductoSeleccionado] = useState(null);
+    const [cantidadInput, setCantidadInput] = useState('');
+    const [areaDestinoId, setAreaDestinoId] = useState(''); // Solo para modo GENERAL
+
+    // Carrito de Salida
+    const [carrito, setCarrito] = useState([]);
     const [cargando, setCargando] = useState(false);
 
+    // 1. Cargar Áreas al inicio
     useEffect(() => {
-        getAreas().then(setAreas).catch(console.error);
+        getAreas().then(data => {
+            setAreas(data);
+        }).catch(console.error);
     }, []);
 
-    // --- CAMBIO DE ÁREA ---
-    const handleAreaChange = async (e) => {
+    // 2. Manejar Cambio de Origen (Carga el inventario correspondiente)
+    const handleOrigenChange = async (e) => {
         const id = e.target.value;
-        setAreaOrigen(id);
-        setSeleccionados({});
-        setStockList([]);
+        setAreaOrigenId(id);
+        setProductoSeleccionado(null);
+        setBusqueda('');
+        setSugerencias([]);
+        setInventarioDisponible([]);
 
-        if (id) {
-            const area = areas.find(a => a.id === Number(id));
-            const nombre = area ? area.nombre : '';
-            setNombreAreaOrigen(nombre);
-            
-            const nombreMin = nombre.toLowerCase();
-            const esAreaEspecial = nombreMin.includes('casino') || 
-                                   nombreMin.includes('evento') || 
-                                   nombreMin.includes('coffe') ||
-                                   nombreMin.includes('cafe');
-            
-            setPermiteMerma(esAreaEspecial);
+        if (!id) return;
 
+        // Detectar si es la opción especial "GENERAL"
+        // NOTA: Debes decidir si "GENERAL" es un ID específico (ej: 999) o una opción hardcodeada.
+        // Aquí asumo que creamos una opción manual en el <select> con valor "GENERAL_MODE"
+        if (id === 'GENERAL_MODE') {
+            setEsModoGeneral(true);
+            try {
+                // Necesitas un servicio que traiga TODO el stock de todas las áreas
+                // Si no lo tienes, podrías llamar a getStockByArea para cada área y unirlos, 
+                // pero lo ideal es un endpoint: /inventory/all-stock
+                const allStock = await getAllStock(); // O implementa esta llamada
+                setInventarioDisponible(allStock);
+            } catch (error) {
+                console.error("Error cargando todo el stock", error);
+                alert("Error cargando inventario general");
+            }
+        } else {
+            setEsModoGeneral(false);
             try {
                 const stock = await getStockByArea(id);
-                setStockList(stock);
-            } catch (error) { console.error("Error stock:", error); }
-        } else {
-            setNombreAreaOrigen('');
-            setPermiteMerma(false);
+                setInventarioDisponible(stock);
+            } catch (error) {
+                console.error(error);
+            }
         }
     };
 
-    const ajustarCantidad = (key, delta) => {
-        const item = seleccionados[key];
-        if (!item) return;
+    // 3. Lógica del Buscador (Autocomplete)
+    const handleBusquedaChange = (texto) => {
+        setBusqueda(texto);
+        setProductoSeleccionado(null); // Reset si el usuario sigue escribiendo
 
-        const productoOriginal = stockList.find(p => (p.sku || p.productSku) === item.sku);
-        const stockMax = productoOriginal ? productoOriginal.cantidadTotal : 9999;
-
-        const nuevaCantidad = item.cantidad + delta;
-
-        if (nuevaCantidad <= 0) {
-            if (window.confirm(`¿Eliminar ${item.tipo === 'MERMA' ? 'Merma' : 'Consumo'} de la lista?`)) {
-                const copia = { ...seleccionados };
-                delete copia[key];
-                setSeleccionados(copia);
-                if (Object.keys(copia).length === 0) setMostrarResumen(false);
-            }
-        } else if (nuevaCantidad > stockMax) {
-            alert(`Cuidado: El stock físico es ${stockMax}`);
-        } else {
-            setSeleccionados(prev => ({
-                ...prev,
-                [key]: { ...prev[key], cantidad: nuevaCantidad }
-            }));
+        if (texto.length < 2) {
+            setSugerencias([]);
+            return;
         }
+
+        const textoMin = texto.toLowerCase();
+        // Filtramos el inventario cargado
+        const filtrados = inventarioDisponible.filter(item => {
+            const nombre = (item.productName || item.nombreProducto || '').toLowerCase();
+            const sku = (item.sku || item.productSku || '').toLowerCase();
+            return nombre.includes(textoMin) || sku.includes(textoMin);
+        });
+
+        setSugerencias(filtrados.slice(0, 10)); // Mostrar máx 10 opciones
     };
 
-    const toggleSeleccion = (producto, tipoAccion = 'CONSUMO') => {
-        const sku = producto.sku || producto.productSku;
-        const nombreReal = producto.productName || producto.nombreProducto || 'Producto';
-        const keyUnica = `${sku}-${tipoAccion}`;
-
-        if (!sku) { alert("Error SKU"); return; }
-
-        if (seleccionados[keyUnica]) {
-            const copia = { ...seleccionados };
-            delete copia[keyUnica];
-            setSeleccionados(copia);
-        } else {
-            const keyContraria = `${sku}-${tipoAccion === 'CONSUMO' ? 'MERMA' : 'CONSUMO'}`;
-            const cantidadOcupada = seleccionados[keyContraria] ? seleccionados[keyContraria].cantidad : 0;
-            const stockDisponible = producto.cantidadTotal - cantidadOcupada;
-
-            if (stockDisponible <= 0) {
-                alert("No queda stock disponible (asignado en otra categoría).");
-                return;
-            }
-
-            const input = prompt(`[${tipoAccion}] Cantidad para ${nombreReal}:\n(Disponible real: ${stockDisponible})`);
-            if (input === null) return; 
-            
-            const cantidad = parseFloat(input);
-            if (isNaN(cantidad) || cantidad <= 0) {
-                alert("Cantidad inválida"); return;
-            }
-            if (cantidad > stockDisponible) {
-                alert(`Stock insuficiente. Solo quedan ${stockDisponible} disponibles.`);
-                return;
-            }
-
-            let destinoId = null;
-            let nombreDestino = null;
-            const esBodegaCentral = nombreAreaOrigen.toLowerCase().includes('sin asignar') || 
-                                    nombreAreaOrigen.toLowerCase().includes('bodega');
-
-            if (esBodegaCentral && tipoAccion === 'CONSUMO') { 
-                const areasPosibles = areas.filter(a => a.id !== Number(areaOrigen));
-                const textoLista = areasPosibles.map(a => `ID ${a.id}: ${a.nombre}`).join('\n');
-                const idDestinoInput = prompt(`📦 Destino:\n\n${textoLista}`);
-                if (!idDestinoInput) return;
-                const areaDestino = areasPosibles.find(a => a.id === Number(idDestinoInput));
-                if (!areaDestino) { alert("ID incorrecto"); return; }
-                destinoId = areaDestino.id;
-                nombreDestino = areaDestino.nombre;
-            }
-
-            setSeleccionados(prev => ({
-                ...prev,
-                [keyUnica]: {
-                    sku, 
-                    nombre: nombreReal, 
-                    cantidad, 
-                    areaDestinoId: destinoId, 
-                    nombreDestino,
-                    tipo: tipoAccion,
-                    key: keyUnica
-                }
-            }));
-        }
+    const seleccionarProducto = (item) => {
+        setProductoSeleccionado(item);
+        setBusqueda(`${item.productName || item.nombreProducto} (${item.sku || item.productSku})`);
+        setSugerencias([]);
+        // Enfocar el input de cantidad automáticamente podría ser útil aquí
+        document.getElementById('inputCantidad').focus();
     };
 
-    const confirmarGuardado = async () => {
-        if (!fechaGuia) { alert("Falta fecha"); return; }
-        if (cargando) return;
+    // 4. Agregar al Carrito
+    const agregarItem = () => {
+        if (!productoSeleccionado) return alert("Selecciona un producto válido de la lista.");
+        if (!cantidadInput || Number(cantidadInput) <= 0) return alert("Ingresa una cantidad válida.");
+
+        const cant = parseFloat(cantidadInput);
+        
+        // Validación de Stock
+        if (cant > productoSeleccionado.cantidadTotal) {
+            return alert(`Stock insuficiente. Solo tienes ${productoSeleccionado.cantidadTotal} disponibles.`);
+        }
+
+        // Validación Modo General: Requiere Destino
+        let nombreDestino = 'Consumo Interno';
+        let destinoIdFinal = null;
+
+        if (esModoGeneral) {
+            if (!areaDestinoId) return alert("En modo GENERAL debes seleccionar un Área de Destino.");
+            const areaDestObj = areas.find(a => a.id === Number(areaDestinoId));
+            nombreDestino = areaDestObj ? areaDestObj.nombre : 'Desconocido';
+            destinoIdFinal = Number(areaDestinoId);
+        }
+
+        const nuevoItem = {
+            uniqueId: Date.now(), // ID temporal para la lista
+            productSku: productoSeleccionado.sku || productoSeleccionado.productSku,
+            productName: productoSeleccionado.productName || productoSeleccionado.nombreProducto,
+            cantidad: cant,
+            // Si es modo general, el origen real es el área del producto seleccionado, no "General"
+            areaOrigenRealId: esModoGeneral ? productoSeleccionado.areaId : Number(areaOrigenId),
+            nombreAreaOrigen: esModoGeneral ? (productoSeleccionado.nombreArea || 'Varios') : areas.find(a => a.id === Number(areaOrigenId))?.nombre,
+            areaDestinoId: destinoIdFinal,
+            nombreAreaDestino: nombreDestino,
+            costoUnitario: productoSeleccionado.costoPromedio || productoSeleccionado.costo || 0, // Asegúrate que el back traiga el costo
+            tipo: tipoMovimiento
+        };
+
+        setCarrito([...carrito, nuevoItem]);
+        
+        // Resetear campos de entrada
+        setBusqueda('');
+        setCantidadInput('');
+        setProductoSeleccionado(null);
+        setAreaDestinoId('');
+    };
+
+    const eliminarDelCarrito = (id) => {
+        setCarrito(carrito.filter(item => item.uniqueId !== id));
+    };
+
+    // 5. Guardar Guía Final
+    const guardarGuia = async () => {
+        if (carrito.length === 0) return alert("La guía está vacía.");
+        if (!fechaGuia) return alert("Falta la fecha.");
+
         setCargando(true);
         try {
-            const detalles = Object.values(seleccionados).map(item => ({
-                productSku: item.sku,
-                cantidad: item.cantidad,
-                areaDestinoId: item.areaDestinoId,
-                tipoSalida: item.tipo 
-            }));
+            // Construimos el payload. 
+            // NOTA: Como en modo GENERAL cada item puede tener un origen distinto, 
+            // tal vez debas ajustar tu backend para recibir una lista mixta, 
+            // o agrupar aquí. Asumiremos que el backend soporta detalles con origen específico 
+            // o que enviaremos la cabecera como 'General' y el detalle manda.
+            
+            // Si tu backend es estricto (1 Guía = 1 Origen), el modo GENERAL debería 
+            // generar múltiples guías o tu backend debe evolucionar.
+            // Por ahora, enviaré el estructura estándar.
 
             const payload = {
                 fecha: fechaGuia,
-                areaOrigenId: Number(areaOrigen),
-                detalles: detalles,
-                responsable: user ? (user.fullName || user.username) : 'Desconocido'
+                areaOrigenId: esModoGeneral ? null : Number(areaOrigenId), // null podría indicar 'Multi' al backend
+                esMultiOrigen: esModoGeneral, // Flag útil para el backend
+                responsable: user?.fullName || 'Sistema',
+                detalles: carrito.map(item => ({
+                    productSku: item.productSku,
+                    cantidad: item.cantidad,
+                    areaOrigenId: item.areaOrigenRealId, // CRUCIAL: Enviar de dónde sale realmente
+                    areaDestinoId: item.areaDestinoId,
+                    tipoSalida: item.tipo
+                }))
             };
 
             await procesarGuiaConsumo(payload);
-            alert("✅ Guía registrada correctamente.");
+            alert("✅ Guía registrada con éxito");
             navigate('/menu');
         } catch (error) {
             console.error(error);
-            alert("Error: " + (error.response?.data || error.message));
-        } finally { setCargando(false); }
+            alert("Error al guardar: " + error.message);
+        } finally {
+            setCargando(false);
+        }
     };
 
-    const productosFiltrados = stockList.filter(p => {
-        const busqueda = filtro.toLowerCase();
-        const nombre = (p.productName || p.nombreProducto || '').toLowerCase();
-        const sku = (p.sku || p.productSku || '').toLowerCase();
-        const cat = (p.categoria || p.category || '').toLowerCase();
-        return nombre.includes(busqueda) || sku.includes(busqueda) || cat.includes(busqueda);
-    });
+    // Cálculos de Totales
+    const totalNetoGuia = carrito.reduce((acc, item) => acc + (item.cantidad * item.costoUnitario), 0);
 
     return (
-        <div className="inventory-container"> {/* Reutilizamos container */}
+        <div className="container-fluid" style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
             
-            {/* CABECERA ESTÁNDAR */}
-            <div className="page-header">
+            {/* CABECERA TÍTULO */}
+            <div className="flex justify-between items-center mb-6">
                 <div>
-                    <h2 className="page-title">📋 Salida de Productos</h2>
-                    <p style={{ margin: 0, color: '#718096', fontSize:'0.9em' }}>
-                        Responsable: <strong>{user?.fullName || user?.username}</strong>
-                    </p>
+                    <h2 className="text-2xl font-bold text-gray-800">📋 Nueva Guía de Salida</h2>
+                    <p className="text-gray-500">Registra consumos, mermas o traspasos internos.</p>
                 </div>
-                <button onClick={() => navigate('/menu')} className="back-btn">⬅ Cancelar</button>
+                <button onClick={() => navigate('/menu')} className="text-gray-600 hover:text-gray-800">
+                    Cancelar
+                </button>
             </div>
 
-            {/* PANEL DE CONTROL (Usando estilos de formulario) */}
-            <div className="form-card" style={{ marginBottom: '25px' }}>
-                <div className="form-grid">
-                    <div className="form-group">
-                        <label className="form-label">1. Área de Origen (Desde donde sale)</label>
-                        <select value={areaOrigen} onChange={handleAreaChange} className="form-select">
-                            <option value="">-- Seleccione Área --</option>
-                            {areas.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
-                        </select>
-                    </div>
-                    <div className="form-group">
-                        <label className="form-label">2. Fecha de Registro</label>
-                        <input type="date" value={fechaGuia} onChange={e => setFechaGuia(e.target.value)} className="form-input" />
-                    </div>
-                </div>
-                
-                {permiteMerma && (
-                    <div style={{ marginTop: '15px', padding: '12px', background: '#fffaf0', borderLeft: '4px solid #ed8936', borderRadius: '4px', color: '#c05621' }}>
-                        ⚠️ <strong>Atención:</strong> Esta área permite registrar <strong>Mermas</strong>. Use el botón rojo en los productos para reportar pérdidas.
-                    </div>
-                )}
-            </div>
-
-            {areaOrigen && (
-                <>
-                    {/* BARRA DE BÚSQUEDA */}
-                    <div style={{ marginBottom: '20px' }}>
+            {/* PASO 1 y 2: CONFIGURACIÓN INICIAL */}
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    
+                    {/* Fecha */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">1. Fecha de Emisión</label>
                         <input 
-                            type="text" 
-                            placeholder="🔍 Buscar producto por nombre, SKU o categoría..." 
-                            value={filtro} 
-                            onChange={e => setFiltro(e.target.value)} 
-                            className="form-input"
-                            style={{ padding: '15px', fontSize: '1.1rem', borderColor: '#3182ce', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }} 
+                            type="date" 
+                            className="w-full p-2 border border-gray-300 rounded focus:border-blue-500 outline-none"
+                            value={fechaGuia}
+                            onChange={(e) => setFechaGuia(e.target.value)}
                         />
                     </div>
 
-                    {/* GRILLA DE PRODUCTOS (NUEVO DISEÑO) */}
-                    <div className="product-grid">
-                        {productosFiltrados.map((p, index) => {
-                            const sku = p.sku || p.productSku || `temp-${index}`;
-                            const nombre = p.productName || p.nombreProducto || 'Sin Nombre';
-                            const enConsumo = !!seleccionados[`${sku}-CONSUMO`];
-                            const enMerma = !!seleccionados[`${sku}-MERMA`];
-
-                            return (
-                                <div key={sku} className="product-card" style={{ borderColor: (enConsumo || enMerma) ? '#3182ce' : '#e2e8f0', borderWidth: (enConsumo || enMerma) ? '2px' : '1px' }}>
-                                    
-                                    {/* Cabecera Tarjeta */}
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                                        <span className="badge badge-sku">{sku}</span>
-                                        <span className="badge badge-cat">{p.categoria || 'Gral'}</span>
-                                    </div>
-                                    
-                                    <h4 style={{ margin: '0 0 10px 0', color: '#2d3748', fontSize: '1rem' }}>{nombre}</h4>
-                                    
-                                    <div style={{ marginTop: 'auto' }}>
-                                        <div style={{ marginBottom: '12px', color: '#718096', fontSize: '0.9rem' }}>
-                                            Disponible: <strong style={{ color: '#2d3748' }}>{p.cantidadTotal}</strong>
-                                        </div>
-                                        
-                                        {/* Acciones */}
-                                        <div className="card-actions">
-                                            <button 
-                                                onClick={() => toggleSeleccion(p, 'CONSUMO')}
-                                                className={`btn-action-card btn-consumo ${enConsumo ? 'active' : ''}`}
-                                            >
-                                                {enConsumo ? `Cant: ${seleccionados[`${sku}-CONSUMO`].cantidad}` : 'Consumo'}
-                                            </button>
-
-                                            {permiteMerma && (
-                                                <button 
-                                                    onClick={() => toggleSeleccion(p, 'MERMA')}
-                                                    className={`btn-action-card btn-merma ${enMerma ? 'active' : ''}`}
-                                                >
-                                                    {enMerma ? `Cant: ${seleccionados[`${sku}-MERMA`].cantidad}` : 'Merma'}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    {/* BOTÓN FLOTANTE */}
-                    <div className="floating-bar">
-                        <button 
-                            onClick={() => setMostrarResumen(true)} 
-                            disabled={Object.keys(seleccionados).length === 0} 
-                            className="btn-floating"
+                    {/* Área de Origen */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">2. Origen (¿De dónde sale?)</label>
+                        <select 
+                            className="w-full p-2 border border-gray-300 rounded focus:border-blue-500 outline-none"
+                            value={areaOrigenId}
+                            onChange={handleOrigenChange}
                         >
-                            Ver Resumen ({Object.keys(seleccionados).length}) 🛒
-                        </button>
+                            <option value="">-- Seleccionar Origen --</option>
+                            <option value="GENERAL_MODE" style={{fontWeight: 'bold', color: '#d69e2e'}}>⭐ GENERAL (Todo el Stock)</option>
+                            {areas.map(area => (
+                                <option key={area.id} value={area.id}>{area.nombre}</option>
+                            ))}
+                        </select>
+                        {esModoGeneral && <small className="text-yellow-600">Modo multiproducto activado</small>}
                     </div>
-                </>
-            )}
 
-            {/* MODAL DE RESUMEN MEJORADO */}
-            {mostrarResumen && (
-                <div className="modal-overlay">
-                    <div className="modal-content">
-                        <h3 style={{ marginTop: 0, color: '#2d3748' }}>🧐 Revisión Final</h3>
-                        
-                        <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: '20px', border: '1px solid #edf2f7', borderRadius: '8px' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize:'0.9em' }}>
-                                <thead style={{ background: '#f7fafc', position: 'sticky', top: 0 }}>
-                                    <tr>
-                                        <th style={{padding:'12px', textAlign:'left', color:'#4a5568'}}>Producto</th>
-                                        <th style={{padding:'12px', textAlign:'center', color:'#4a5568'}}>Cant.</th>
-                                        <th style={{padding:'12px', textAlign:'right'}}></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {Object.values(seleccionados).map(item => (
-                                        <tr key={item.key} style={{ borderBottom: '1px solid #edf2f7' }}>
-                                            <td style={{padding:'12px'}}>
-                                                <div style={{fontWeight:'600'}}>{item.nombre}</div>
-                                                <div style={{fontSize:'0.8em', marginTop:'2px'}}>
-                                                    {item.tipo === 'MERMA' 
-                                                        ? <span style={{color:'#e53e3e'}}>🗑️ Merma</span> 
-                                                        : <span style={{color:'#38a169'}}>✅ Consumo</span>
-                                                    }
-                                                    {item.nombreDestino && <span style={{color:'#718096'}}> ➡ {item.nombreDestino}</span>}
-                                                </div>
-                                            </td>
-                                            
-                                            <td style={{padding:'12px', textAlign:'center'}}>
-                                                <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'}}>
-                                                    <button onClick={() => ajustarCantidad(item.key, -1)} style={{padding:'2px 8px', borderRadius:'4px', border:'1px solid #cbd5e0', background:'white'}}>➖</button>
-                                                    <strong>{item.cantidad}</strong>
-                                                    <button onClick={() => ajustarCantidad(item.key, 1)} style={{padding:'2px 8px', borderRadius:'4px', border:'1px solid #cbd5e0', background:'white'}}>➕</button>
-                                                </div>
-                                            </td>
-
-                                            <td style={{padding:'12px', textAlign:'right'}}>
-                                                <button 
-                                                    onClick={() => {
-                                                        const copia = { ...seleccionados };
-                                                        delete copia[item.key];
-                                                        setSeleccionados(copia);
-                                                        if(Object.keys(copia).length===0) setMostrarResumen(false);
-                                                    }} 
-                                                    style={{border:'none', background:'none', cursor:'pointer', color:'#e53e3e', fontSize:'1.1rem'}}
-                                                >
-                                                    ✕
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                            <button onClick={() => setMostrarResumen(false)} className="btn-secondary">
-                                Seguir Editando
-                            </button>
-                            <button onClick={confirmarGuardado} disabled={cargando} className="btn-primary">
-                                {cargando ? 'Procesando...' : '✅ Confirmar Todo'}
-                            </button>
+                    {/* Tipo de Movimiento */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">3. Tipo de Salida</label>
+                        <div className="flex gap-4 mt-1">
+                            <label className={`flex items-center gap-2 px-4 py-2 rounded cursor-pointer border ${tipoMovimiento === 'CONSUMO' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-gray-300'}`}>
+                                <input 
+                                    type="radio" 
+                                    name="tipo" 
+                                    checked={tipoMovimiento === 'CONSUMO'} 
+                                    onChange={() => setTipoMovimiento('CONSUMO')}
+                                    className="hidden" 
+                                />
+                                ✅ Consumo
+                            </label>
+                            <label className={`flex items-center gap-2 px-4 py-2 rounded cursor-pointer border ${tipoMovimiento === 'MERMA' ? 'bg-red-50 border-red-500 text-red-700' : 'border-gray-300'}`}>
+                                <input 
+                                    type="radio" 
+                                    name="tipo" 
+                                    checked={tipoMovimiento === 'MERMA'} 
+                                    onChange={() => setTipoMovimiento('MERMA')}
+                                    className="hidden" 
+                                />
+                                🗑️ Merma
+                            </label>
                         </div>
                     </div>
                 </div>
+            </div>
+
+            {/* PASO 3 y 4: AGREGAR PRODUCTOS */}
+            {areaOrigenId && (
+                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6" style={{ borderLeft: '4px solid #3182ce' }}>
+                    <h3 className="text-lg font-bold text-gray-700 mb-4">Agregar Productos a la Guía</h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                        
+                        {/* Buscador Autocomplete */}
+                        <div className="md:col-span-5 relative">
+                            <label className="block text-xs font-bold text-gray-500 mb-1">BUSCAR PRODUCTO</label>
+                            <input 
+                                type="text"
+                                placeholder="Escribe nombre o SKU..."
+                                className="w-full p-2 border border-gray-300 rounded focus:border-blue-500 outline-none"
+                                value={busqueda}
+                                onChange={(e) => handleBusquedaChange(e.target.value)}
+                            />
+                            {/* Lista de Sugerencias */}
+                            {sugerencias.length > 0 && (
+                                <ul style={suggestionsStyle}>
+                                    {sugerencias.map(item => (
+                                        <li 
+                                            key={item.id || item.inventoryId} 
+                                            onClick={() => seleccionarProducto(item)}
+                                            className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 flex justify-between"
+                                        >
+                                            <span>{item.productName || item.nombreProducto}</span>
+                                            <span className="text-gray-500 text-sm">Stock: {item.cantidadTotal} {esModoGeneral && `(${item.nombreArea})`}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+
+                        {/* Cantidad */}
+                        <div className="md:col-span-2">
+                            <label className="block text-xs font-bold text-gray-500 mb-1">CANTIDAD</label>
+                            <input 
+                                id="inputCantidad"
+                                type="number" 
+                                placeholder="0.0" 
+                                className="w-full p-2 border border-gray-300 rounded focus:border-blue-500 outline-none"
+                                value={cantidadInput}
+                                onChange={(e) => setCantidadInput(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && agregarItem()}
+                            />
+                        </div>
+
+                        {/* Destino (Solo visible en modo GENERAL) */}
+                        {esModoGeneral && (
+                            <div className="md:col-span-3">
+                                <label className="block text-xs font-bold text-gray-500 mb-1">DESTINO FINAL</label>
+                                <select 
+                                    className="w-full p-2 border border-gray-300 rounded focus:border-blue-500 outline-none"
+                                    value={areaDestinoId}
+                                    onChange={(e) => setAreaDestinoId(e.target.value)}
+                                >
+                                    <option value="">-- ¿Dónde se usará? --</option>
+                                    {areas.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+                                </select>
+                            </div>
+                        )}
+
+                        {/* Botón Agregar */}
+                        <div className="md:col-span-2">
+                            <button 
+                                onClick={agregarItem}
+                                className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 transition"
+                            >
+                                ➕ Agregar
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {productoSeleccionado && (
+                        <div className="mt-2 text-sm text-gray-600">
+                            Stock disponible: <strong>{productoSeleccionado.cantidadTotal}</strong> | 
+                            Costo Unit: <strong>${productoSeleccionado.costoPromedio || productoSeleccionado.costo || 0}</strong>
+                        </div>
+                    )}
+                </div>
             )}
+
+            {/* PASO 5: DETALLE (TABLA) */}
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                    <thead className="bg-gray-100 border-b border-gray-200">
+                        <tr>
+                            <th className="p-4 text-xs font-bold text-gray-600 uppercase">Fecha</th>
+                            <th className="p-4 text-xs font-bold text-gray-600 uppercase">Producto</th>
+                            <th className="p-4 text-xs font-bold text-gray-600 uppercase">Origen Real</th>
+                            <th className="p-4 text-xs font-bold text-gray-600 uppercase">Destino / Tipo</th>
+                            <th className="p-4 text-xs font-bold text-gray-600 uppercase text-right">Cantidad</th>
+                            <th className="p-4 text-xs font-bold text-gray-600 uppercase text-right">Neto Total</th>
+                            <th className="p-4"></th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {carrito.length === 0 ? (
+                            <tr>
+                                <td colSpan="7" className="p-8 text-center text-gray-400 italic">
+                                    No hay items en la guía. Agrega productos arriba.
+                                </td>
+                            </tr>
+                        ) : (
+                            carrito.map((item) => (
+                                <tr key={item.uniqueId} className="hover:bg-gray-50">
+                                    <td className="p-4 text-gray-700">{fechaGuia}</td>
+                                    <td className="p-4 font-medium text-gray-800">
+                                        {item.productName}
+                                        <div className="text-xs text-gray-400">{item.productSku}</div>
+                                    </td>
+                                    <td className="p-4 text-gray-600">{item.nombreAreaOrigen}</td>
+                                    <td className="p-4">
+                                        {item.tipo === 'MERMA' 
+                                            ? <span className="inline-block px-2 py-1 text-xs font-bold text-red-600 bg-red-100 rounded">MERMA</span>
+                                            : <span className="text-gray-700">{item.nombreAreaDestino || 'Consumo'}</span>
+                                        }
+                                    </td>
+                                    <td className="p-4 text-right font-bold">{item.cantidad}</td>
+                                    <td className="p-4 text-right text-gray-700">
+                                        ${(item.cantidad * item.costoUnitario).toLocaleString('es-CL')}
+                                    </td>
+                                    <td className="p-4 text-right">
+                                        <button 
+                                            onClick={() => eliminarDelCarrito(item.uniqueId)}
+                                            className="text-red-500 hover:text-red-700 font-bold"
+                                        >
+                                            ✕
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                    {carrito.length > 0 && (
+                        <tfoot className="bg-gray-50 border-t border-gray-200">
+                            <tr>
+                                <td colSpan="5" className="p-4 text-right font-bold text-gray-700">TOTAL NETO GUÍA:</td>
+                                <td className="p-4 text-right font-bold text-blue-700 text-lg">
+                                    ${totalNetoGuia.toLocaleString('es-CL')}
+                                </td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    )}
+                </table>
+            </div>
+
+            {/* BOTÓN FINAL */}
+            <div className="mt-6 flex justify-end">
+                <button 
+                    onClick={guardarGuia}
+                    disabled={cargando || carrito.length === 0}
+                    className={`px-8 py-3 rounded shadow text-white font-bold text-lg transition
+                        ${cargando || carrito.length === 0 
+                            ? 'bg-gray-400 cursor-not-allowed' 
+                            : 'bg-green-600 hover:bg-green-700 transform hover:scale-105'}`}
+                >
+                    {cargando ? 'Guardando...' : '💾 Guardar Guía de Salida'}
+                </button>
+            </div>
         </div>
     );
 }
