@@ -1,26 +1,25 @@
 import { useState, useEffect } from 'react';
-import { getInventarioCompleto } from '../services/inventoryService';
+import { getInventarioCompleto, ajustarStock } from '../services/inventoryService';
 import { useNavigate } from 'react-router-dom';
 import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 export default function InventarioPage() {
     const navigate = useNavigate();
-
-    // Datos Principales
     const [inventario, setInventario] = useState([]);
     const [loading, setLoading] = useState(true);
-
-    // Estados para Filtros
+    
+    // Filtros y Selección
     const [busqueda, setBusqueda] = useState('');
-    const [filtroCategoria, setFiltroCategoria] = useState('');
     const [filtroArea, setFiltroArea] = useState('');
-
-    // Listas para Selectores
-    const [listaCategorias, setListaCategorias] = useState([]);
     const [listaAreas, setListaAreas] = useState([]);
-
-    // Selección PDF
     const [seleccionados, setSeleccionados] = useState({});
+
+    // Estado del Modal de Ajuste
+    const [showModal, setShowModal] = useState(false);
+    const [itemAjuste, setItemAjuste] = useState(null);
+    const [nuevaCantidad, setNuevaCantidad] = useState('');
+    const [motivoAjuste, setMotivoAjuste] = useState('');
 
     useEffect(() => {
         cargarInventario();
@@ -30,197 +29,144 @@ export default function InventarioPage() {
         try {
             const data = await getInventarioCompleto();
             setInventario(data);
-            
-            // Extraer únicos
-            const categoriasUnicas = [...new Set(data.map(item => item.category || 'Sin Categoría'))].sort();
-            setListaCategorias(categoriasUnicas);
-            
-            const areasUnicas = [...new Set(data.map(item => item.areaNombre || 'Sin Área'))].sort();
-            setListaAreas(areasUnicas);
+            setListaAreas([...new Set(data.map(item => item.areaNombre))].sort());
         } catch (error) {
-            console.error(error);
-        } finally {
-            setLoading(false);
+            console.error("Error:", error);
+        } finally { setLoading(false); }
+    };
+
+    // Lógica de Modal
+    const abrirModalAjuste = (item) => {
+        setItemAjuste(item);
+        setNuevaCantidad(item.cantidadTotal);
+        setMotivoAjuste('Corrección por inventario físico');
+        setShowModal(true);
+    };
+
+    const ejecutarAjuste = async () => {
+        if (!nuevaCantidad || nuevaCantidad < 0) return alert("Cantidad no válida");
+        try {
+            await ajustarStock({
+                productSku: itemAjuste.productSku,
+                areaId: itemAjuste.areaId,
+                nuevaCantidad: parseFloat(nuevaCantidad),
+                motivo: motivoAjuste
+            });
+            alert("✅ Stock actualizado correctamente");
+            setShowModal(false);
+            cargarInventario();
+        } catch (error) {
+            alert(error.message);
         }
     };
 
-    // --- FILTRADO ---
     const datosFiltrados = inventario.filter(item => {
-        const texto = busqueda.toLowerCase();
-        const coincideTexto = 
-            (item.productName || '').toLowerCase().includes(texto) ||
-            (item.productSku || '').toLowerCase().includes(texto);
-        const coincideCategoria = filtroCategoria === '' || (item.category || 'Sin Categoría') === filtroCategoria;
-        const coincideArea = filtroArea === '' || (item.areaNombre || 'Sin Área') === filtroArea;
-        return coincideTexto && coincideCategoria && coincideArea;
+        const matchText = item.productName?.toLowerCase().includes(busqueda.toLowerCase()) || 
+                         item.productSku?.toLowerCase().includes(busqueda.toLowerCase());
+        const matchArea = !filtroArea || item.areaNombre === filtroArea;
+        return matchText && matchArea;
     });
-
-    const toggleSeleccion = (item) => {
-        const key = `${item.productSku}-${item.areaNombre}`;
-        setSeleccionados(prev => {
-            const nuevo = { ...prev };
-            if (nuevo[key]) delete nuevo[key];
-            else nuevo[key] = item;
-            return nuevo;
-        });
-    };
-
-    const formatearCantidad = (cantidad) => {
-        if (!cantidad) return '0';
-        return parseFloat(Number(cantidad).toFixed(1));
-    };
-
-    const descargarPDF = () => {
-        const itemsParaImprimir = Object.values(seleccionados);
-        if (itemsParaImprimir.length === 0) {
-            alert("Seleccione al menos un producto.");
-            return;
-        }
-
-        const doc = new jsPDF();
-        doc.setFontSize(18);
-        doc.text("Lista de Verificación de Inventario", 14, 20);
-        doc.setFontSize(10);
-        doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 14, 28);
-
-        let y = 40;
-        doc.setFont(undefined, 'bold');
-        doc.text("Producto", 14, y);
-        doc.text("Área", 80, y);
-        doc.text("Cant.", 130, y);
-        doc.text("Categoría", 160, y);
-        doc.line(10, y + 2, 200, y + 2);
-        
-        doc.setFont(undefined, 'normal');
-        y += 10;
-
-        itemsParaImprimir.forEach((item) => {
-            if (y > 280) { doc.addPage(); y = 20; }
-            const nombre = (item.productName || 'Sin Nombre').substring(0,35);
-            const area = item.areaNombre || '-';
-            const cantidadTxt = `${formatearCantidad(item.cantidadTotal)} ${item.unidadMedida || ''}`;
-            
-            doc.text(nombre, 14, y);
-            doc.text(area, 80, y);
-            doc.text(cantidadTxt, 130, y);
-            doc.text(item.category || '-', 160, y);
-            y += 8;
-        });
-        doc.save("Lista_Inventario.pdf");
-    };
 
     return (
         <div className="inventory-container">
-            {/* CABECERA */}
             <div className="page-header">
-                <h2 className="page-title">📦 Inventario</h2>
-                <button onClick={() => navigate('/menu')} className="back-btn">
-                    ⬅ Volver
-                </button>
+                <h2 className="page-title">📦 Control de Inventario</h2>
+                <button onClick={() => navigate('/menu')} className="back-btn">Volver</button>
             </div>
 
-            {/* FILTROS */}
+            {/* Panel de Filtros */}
             <div className="filters-panel">
-                <div className="filter-group" style={{ flex: 2 }}>
-                    <label className="filter-label">Buscar (Nombre/SKU)</label>
+                <div className="filter-group" style={{ gridColumn: 'span 2' }}>
                     <input 
-                        type="text" 
-                        placeholder="Escriba para buscar..." 
+                        className="filter-input"
+                        placeholder="Buscar por nombre o SKU..."
                         value={busqueda}
                         onChange={(e) => setBusqueda(e.target.value)}
-                        className="filter-input"
                     />
                 </div>
-
                 <div className="filter-group">
-                    <label className="filter-label">Categoría</label>
-                    <select 
-                        value={filtroCategoria} 
-                        onChange={(e) => setFiltroCategoria(e.target.value)}
-                        className="filter-select"
-                    >
-                        <option value="">Todas</option>
-                        {listaCategorias.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    <select className="filter-select" onChange={(e) => setFiltroArea(e.target.value)}>
+                        <option value="">Todas las Áreas</option>
+                        {listaAreas.map(a => <option key={a} value={a}>{a}</option>)}
                     </select>
                 </div>
-
-                <div className="filter-group">
-                    <label className="filter-label">Área</label>
-                    <select 
-                        value={filtroArea} 
-                        onChange={(e) => setFiltroArea(e.target.value)}
-                        className="filter-select"
-                    >
-                        <option value="">Todas</option>
-                        {listaAreas.map(area => <option key={area} value={area}>{area}</option>)}
-                    </select>
-                </div>
-
-                <button 
-                    onClick={descargarPDF} 
-                    className="pdf-btn"
-                    disabled={Object.keys(seleccionados).length === 0}
-                >
-                    <span>📄</span> PDF ({Object.keys(seleccionados).length})
-                </button>
             </div>
 
-            {/* TABLA RESPONSIVA */}
             <div className="table-container">
                 <table className="responsive-table">
                     <thead>
                         <tr>
-                            <th style={{width: '50px', textAlign:'center'}}>✔</th>
-                            <th>Producto</th>
-                            <th>Categoría</th>
-                            <th>Área Ubicación</th>
-                            <th style={{textAlign: 'right'}}>Cantidad</th>
+                            <th>Producto / SKU</th>
+                            <th>Ubicación</th>
+                            <th style={{ textAlign: 'right' }}>Stock</th>
+                            <th style={{ textAlign: 'center' }}>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {loading ? (
-                            <tr><td colSpan="5" style={{padding:'20px', textAlign:'center'}}>Cargando inventario...</td></tr>
-                        ) : datosFiltrados.length === 0 ? (
-                            <tr><td colSpan="5" style={{padding:'20px', textAlign:'center'}}>No se encontraron resultados.</td></tr>
-                        ) : (
-                            datosFiltrados.map((item, index) => {
-                                const key = `${item.productSku}-${item.areaNombre}`;
-                                const isChecked = !!seleccionados[key];
-
-                                return (
-                                    <tr key={index} className={isChecked ? 'row-selected' : ''}>
-                                        <td data-label="Seleccionar">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={isChecked} 
-                                                onChange={() => toggleSeleccion(item)}
-                                                className="custom-checkbox"
-                                            />
-                                            {/* Texto visible solo en móvil para aclarar qué es el checkbox */}
-                                            <span className="mobile-only-text" style={{display: 'none'}}>Seleccionar</span>
-                                        </td>
-                                        <td data-label="Producto">
-                                            <strong>{item.productName || 'Sin Nombre'}</strong>
-                                            <div style={{color:'#718096', fontSize:'0.85em'}}>{item.productSku}</div>
-                                        </td>
-                                        <td data-label="Categoría">
-                                            <span className="badge-category">
-                                                {item.category || 'S/C'}
-                                            </span>
-                                        </td>
-                                        <td data-label="Área">
-                                            {item.areaNombre || 'General'}
-                                        </td>
-                                        <td data-label="Cantidad" className="text-quantity" style={{textAlign: 'right'}}>
-                                            {formatearCantidad(item.cantidadTotal)} {item.unidadMedida}
-                                        </td>
-                                    </tr>
-                                );
-                            })
-                        )}
+                        {datosFiltrados.map((item) => {
+                            const isLow = item.cantidadTotal <= 5;
+                            return (
+                                <tr key={`${item.productSku}-${item.areaNombre}`}>
+                                    <td data-label="Producto">
+                                        <strong>{item.productName}</strong>
+                                        <div style={{ fontSize: '0.75rem', color: '#718096' }}>{item.productSku}</div>
+                                    </td>
+                                    <td data-label="Área">
+                                        <span className="badge-category">{item.areaNombre}</span>
+                                    </td>
+                                    <td data-label="Stock" style={{ textAlign: 'right' }}>
+                                        <span style={{ color: isLow ? '#e53e3e' : '#2f855a', fontWeight: 'bold' }}>
+                                            {item.cantidadTotal} {item.unidadMedida}
+                                        </span>
+                                        {isLow && <div style={{ fontSize: '0.65rem', color: '#e53e3e' }}>¡STOCK BAJO!</div>}
+                                    </td>
+                                    <td data-label="Acciones" style={{ textAlign: 'center' }}>
+                                        <button className="btn-secondary" onClick={() => abrirModalAjuste(item)}>
+                                            🔧 Ajustar
+                                        </button>
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
+
+            {/* Modal de Ajuste */}
+            {showModal && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <h3>Ajuste Manual: {itemAjuste?.productName}</h3>
+                        <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '1rem' }}>
+                            Ubicación: {itemAjuste?.areaNombre}
+                        </p>
+                        
+                        <div className="form-group">
+                            <label className="form-label">Nueva Cantidad Física</label>
+                            <input 
+                                type="number" 
+                                className="form-input"
+                                value={nuevaCantidad}
+                                onChange={(e) => setNuevaCantidad(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="form-group" style={{ marginTop: '1rem' }}>
+                            <label className="form-label">Motivo</label>
+                            <select className="form-select" value={motivoAjuste} onChange={(e) => setMotivoAjuste(e.target.value)}>
+                                <option value="Diferencia Inventario">Diferencia de Inventario</option>
+                                <option value="Producto Dañado">Producto Dañado / Merma</option>
+                                <option value="Error de Ingreso">Error de Ingreso Previo</option>
+                            </select>
+                        </div>
+
+                        <div className="form-actions">
+                            <button className="btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
+                            <button className="btn-primary" onClick={ejecutarAjuste}>Guardar Ajuste</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -740,3 +740,93 @@ html, body {
   .floating-bar { right: 10px; bottom: 10px; left: 10px; } /* Botón ancho completo */
   .btn-floating { width: 100%; }
 }
+/* =========================================
+   7. ESTILOS PARA EL BUSCADOR DINÁMICO (Autocomplete)
+   ========================================= */
+
+/* Contenedor relativo para que la lista flote correctamente */
+.search-container {
+  position: relative;
+  width: 100%;
+}
+
+/* La lista desplegable de resultados */
+.search-results-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background-color: white;
+  border: 1px solid #e2e8f0;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+/* Cada ítem de la lista */
+.search-result-item {
+  padding: 12px 15px;
+  cursor: pointer;
+  border-bottom: 1px solid #f7fafc;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background-color 0.2s;
+}
+
+.search-result-item:hover {
+  background-color: #ebf8ff; /* Azul muy suave al pasar el mouse */
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+/* Información dentro del ítem */
+.result-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.result-name {
+  font-weight: 600;
+  color: #2d3748;
+  font-size: 0.95rem;
+}
+
+.result-sku {
+  font-size: 0.8rem;
+  color: #a0aec0;
+}
+
+.result-stock {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #38a169; /* Verde para el stock disponible */
+  background-color: #f0fff4;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+/* Cuando el input está deshabilitado porque no hay área elegida */
+.form-input:disabled {
+  background-color: #edf2f7;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Animación sutil para la aparición de la lista */
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.search-results-list {
+  animation: fadeInDown 0.2s ease-out;
+}

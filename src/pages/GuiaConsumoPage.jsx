@@ -1,240 +1,234 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAreas } from '../services/areaService';
-import { getAllStock } from '../services/inventoryService';
+import { buscarStockPorArea } from '../services/inventoryService';
 import { procesarGuiaConsumo } from '../services/salidaService';
 
 export default function GuiaConsumoPage() {
     const navigate = useNavigate();
 
-    // --- ESTADOS ---
+    // --- ESTADOS DE CABECERA ---
     const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
     const [areaOrigen, setAreaOrigen] = useState('');
     const [tipoSalida, setTipoSalida] = useState('CONSUMO');
-    
-    // Inicializamos como arrays vacíos para evitar errores de .map
-    const [listaAreas, setListaAreas] = useState([]);
-    const [inventario, setInventario] = useState([]);
+    const [responsable] = useState("Usuario Sistema"); // Podrías sacarlo de un AuthContext
 
-    const [productoSeleccionado, setProductoSeleccionado] = useState('');
+    // --- ESTADOS DE BÚSQUEDA Y DATA ---
+    const [listaAreas, setListaAreas] = useState([]);
+    const [query, setQuery] = useState('');
+    const [resultadosBusqueda, setResultadosBusqueda] = useState([]);
+    const [productoSeleccionado, setProductoSeleccionado] = useState(null);
     const [cantidadInput, setCantidadInput] = useState('');
+
+    // --- ESTADO DE LA TABLA DE DETALLES ---
     const [detalles, setDetalles] = useState([]);
 
-    // --- CARGAR DATOS ---
+    // 1. Cargar áreas al montar el componente
     useEffect(() => {
-        cargarDatos();
+        getAreas().then(data => setListaAreas(Array.isArray(data) ? data : []));
     }, []);
 
-    const cargarDatos = async () => {
-        try {
-            console.log("Cargando datos...");
-            
-            const areasData = await getAreas();
-            console.log("Areas recibidas:", areasData);
-            // Validación de seguridad: si no es array, forzamos array vacío
-            setListaAreas(Array.isArray(areasData) ? areasData : []);
+    // 2. Buscador Dinámico: Se dispara cuando cambia el query o el área
+    useEffect(() => {
+        const delayDebounceFn = setTimeout(async () => {
+            if (areaOrigen && query.length > 1 && !productoSeleccionado) {
+                try {
+                    const data = await buscarStockPorArea(areaOrigen, query);
+                    setResultadosBusqueda(data);
+                } catch (error) {
+                    console.error("Error en búsqueda:", error);
+                }
+            } else {
+                setResultadosBusqueda([]);
+            }
+        }, 300); // 300ms de espera para no saturar el servidor
 
-            const stocksData = await getAllStock();
-            console.log("Inventario recibido:", stocksData);
-            // Validación de seguridad
-            setInventario(Array.isArray(stocksData) ? stocksData : []);
+        return () => clearTimeout(delayDebounceFn);
+    }, [query, areaOrigen, productoSeleccionado]);
 
-        } catch (error) {
-            console.error("Error cargando datos:", error);
-        }
-    };
-
-    // --- MANEJADORES ---
+    // 3. Agregar producto a la lista temporal
     const handleAgregarProducto = () => {
-        if (!productoSeleccionado || !cantidadInput) return alert("Falta producto o cantidad");
-        if (parseFloat(cantidadInput) <= 0) return alert("La cantidad debe ser mayor a 0");
-
-        // Búsqueda segura
-        const prodInfo = inventario.find(p => p.productSku === productoSeleccionado);
+        if (!productoSeleccionado) return alert("Debes seleccionar un producto de la lista");
+        const cant = parseFloat(cantidadInput);
+        
+        if (isNaN(cant) || cant <= 0) return alert("Ingresa una cantidad válida");
+        if (cant > productoSeleccionado.cantidadTotal) {
+            return alert(`Stock insuficiente. Máximo disponible: ${productoSeleccionado.cantidadTotal}`);
+        }
 
         const nuevoItem = {
-            productSku: productoSeleccionado,
-            productName: prodInfo ? prodInfo.productName : 'Desconocido',
-            unidad: prodInfo ? prodInfo.unidadMedida : 'Uni',
-            cantidad: parseFloat(cantidadInput),
-            tipoSalida: tipoSalida, 
+            productSku: productoSeleccionado.sku,
+            productName: productoSeleccionado.nombreProducto,
+            unidad: productoSeleccionado.unidadMedida,
+            cantidad: cant,
+            tipoSalida: tipoSalida,
             areaOrigenId: areaOrigen
         };
 
         setDetalles([...detalles, nuevoItem]);
-        setProductoSeleccionado('');
+        
+        // Limpiar buscador
+        setProductoSeleccionado(null);
+        setQuery('');
         setCantidadInput('');
     };
 
-    const handleEliminarDetalle = (index) => {
-        const nuevaLista = [...detalles];
-        nuevaLista.splice(index, 1);
-        setDetalles(nuevaLista);
-    };
-
+    // 4. Enviar guía al Backend (Aquí se aplica el FIFO)
     const handleGuardarGuia = async () => {
-        if (detalles.length === 0) return alert("No hay productos en la guía");
-        if (!areaOrigen) return alert("Selecciona el Origen");
+        if (detalles.length === 0) return alert("La guía está vacía");
 
         const guiaDto = {
-            areaOrigenId: areaOrigen,
-            fecha: fecha,
-            responsable: "Usuario Actual", 
-            detalles: detalles
+            areaOrigenId: parseInt(areaOrigen),
+            fecha,
+            responsable,
+            detalles
         };
 
         try {
             await procesarGuiaConsumo(guiaDto);
-            alert("✅ Guía registrada correctamente");
+            alert("✅ Guía procesada. El stock se ha descontado siguiendo el orden FIFO.");
             navigate('/menu');
         } catch (error) {
-            console.error(error);
-            alert("❌ Error al guardar la guía");
+            const msg = error.response?.data?.message || "Error al procesar la salida";
+            alert("❌ " + msg);
         }
     };
 
     return (
-        <div style={{ padding: '2rem', backgroundColor: '#f7fafc', minHeight: '100vh' }}>
-            
-            <div style={{ maxWidth: '900px', margin: '0 auto 1.5rem auto' }}>
-                <h2 style={{ color: '#2d3748', fontSize: '1.8rem' }}>📋 Nueva Guía de Salida</h2>
+        <div className="inventory-container">
+            <div className="page-header">
+                <h2 className="page-title">📋 Nueva Guía de Salida</h2>
+                <button onClick={() => navigate('/menu')} className="back-btn">Volver</button>
             </div>
 
             <div className="form-card">
-                
-                {/* 1. DATOS GENERALES */}
+                {/* SECCIÓN 1: CONFIGURACIÓN INICIAL */}
                 <div className="form-grid">
                     <div className="form-group">
-                        <label className="form-label">Fecha de Emisión</label>
-                        <input 
-                            type="date" 
-                            className="form-input"
-                            value={fecha}
-                            onChange={(e) => setFecha(e.target.value)}
-                        />
+                        <label className="form-label">Fecha</label>
+                        <input type="date" className="form-input" value={fecha} onChange={e => setFecha(e.target.value)} />
                     </div>
 
                     <div className="form-group">
-                        <label className="form-label">Origen (Área)</label>
+                        <label className="form-label">Bodega de Origen</label>
                         <select 
-                            className="form-select"
-                            value={areaOrigen}
-                            onChange={(e) => setAreaOrigen(e.target.value)}
+                            className="form-select" 
+                            value={areaOrigen} 
+                            onChange={e => {
+                                setAreaOrigen(e.target.value);
+                                setDetalles([]); // Limpiar si cambia bodega
+                                setProductoSeleccionado(null);
+                            }}
                         >
-                            <option value="">-- Seleccionar --</option>
-                            {/* PROTECCIÓN: (listaAreas || []) asegura que siempre haya algo que mapear */}
-                            {(listaAreas || []).map(area => (
-                                <option key={area.id} value={area.id}>{area.nombre}</option>
-                            ))}
+                            <option value="">-- Seleccione Origen --</option>
+                            {listaAreas.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
                         </select>
                     </div>
 
                     <div className="form-group">
-                        <label className="form-label">Tipo de Salida</label>
-                        <select 
-                            className="form-select"
-                            value={tipoSalida}
-                            onChange={(e) => setTipoSalida(e.target.value)}
-                            style={{ 
-                                borderColor: tipoSalida === 'MERMA' ? '#fc8181' : '#68d391',
-                                borderWidth: '2px'
-                            }}
-                        >
-                            <option value="CONSUMO">✅ Consumo Interno</option>
-                            <option value="MERMA">🗑 Merma / Pérdida</option>
+                        <label className="form-label">Motivo General</label>
+                        <select className="form-select" value={tipoSalida} onChange={e => setTipoSalida(e.target.value)}>
+                            <option value="CONSUMO">Consumo Interno</option>
+                            <option value="MERMA">Merma / Desecho</option>
                         </select>
                     </div>
                 </div>
 
-                <hr style={{ margin: '2rem 0', border: '0', borderTop: '1px solid #e2e8f0' }} />
+                <hr style={{ margin: '2rem 0', opacity: 0.2 }} />
 
-                {/* 2. AGREGAR PRODUCTOS */}
-                <h4 style={{ marginBottom: '1rem', color: '#4a5568' }}>Agregar Productos</h4>
-                
-                <div className="form-grid" style={{ gridTemplateColumns: '2fr 1fr auto', alignItems: 'end' }}>
-                    
-                    <div className="form-group">
-                        <label className="form-label">Buscar Producto</label>
-                        <select 
-                            className="form-select"
-                            value={productoSeleccionado}
-                            onChange={(e) => setProductoSeleccionado(e.target.value)}
-                        >
-                            <option value="">-- Selecciona Producto --</option>
-                            {/* PROTECCIÓN: Verificamos que inventario sea un array antes de mapear */}
-                            {Array.isArray(inventario) && [...new Set(inventario.map(item => item.productSku))].map(sku => {
-                                const item = inventario.find(p => p.productSku === sku);
-                                return (
-                                    <option key={sku} value={sku}>
-                                        {item ? item.productName : 'Producto'} ({sku})
-                                    </option>
-                                );
-                            })}
-                        </select>
+                {/* SECCIÓN 2: BUSCADOR DE STOCK */}
+                <div className="form-grid" style={{ gridTemplateColumns: '2fr 1fr auto' }}>
+                    <div className="search-container">
+                        <label className="form-label">Producto (Stock en tiempo real)</label>
+                        <input 
+                            type="text" 
+                            className="form-input"
+                            placeholder={areaOrigen ? "Escriba para buscar..." : "⚠️ Primero elija origen"}
+                            value={query}
+                            onChange={e => { setQuery(e.target.value); setProductoSeleccionado(null); }}
+                            disabled={!areaOrigen}
+                        />
+                        
+                        {resultadosBusqueda.length > 0 && (
+                            <ul className="search-results-list">
+                                {resultadosBusqueda.map(prod => (
+                                    <li 
+                                        key={prod.sku} 
+                                        className="search-result-item"
+                                        onClick={() => {
+                                            setProductoSeleccionado(prod);
+                                            setQuery(prod.nombreProducto);
+                                            setResultadosBusqueda([]);
+                                        }}
+                                    >
+                                        <div className="result-info">
+                                            <span className="result-name">{prod.nombreProducto}</span>
+                                            <span className="result-sku">SKU: {prod.sku}</span>
+                                        </div>
+                                        <span className="result-stock">{prod.cantidadTotal} {prod.unidadMedida}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
                     </div>
 
                     <div className="form-group">
-                        <label className="form-label">Cantidad</label>
+                        <label className="form-label">Cantidad a sacar</label>
                         <input 
                             type="number" 
                             className="form-input"
-                            placeholder="0.0"
                             value={cantidadInput}
-                            onChange={(e) => setCantidadInput(e.target.value)}
+                            onChange={e => setCantidadInput(e.target.value)}
+                            placeholder={productoSeleccionado ? `Máx ${productoSeleccionado.cantidadTotal}` : "0"}
                         />
                     </div>
 
                     <button 
-                        onClick={handleAgregarProducto}
-                        className="btn-primary"
-                        style={{ height: '48px', justifyContent: 'center' }}
+                        onClick={handleAgregarProducto} 
+                        className="btn-primary" 
+                        style={{ height: '45px', marginTop: '28px' }}
                     >
-                        + Agregar
+                        + Añadir
                     </button>
                 </div>
 
-                {/* 3. TABLA DE DETALLES */}
-                <div style={{ marginTop: '2rem', overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+                {/* SECCIÓN 3: TABLA DE RESUMEN */}
+                <div className="table-container" style={{ marginTop: '2rem' }}>
+                    <table className="responsive-table">
                         <thead>
-                            <tr style={{ backgroundColor: '#edf2f7', textAlign: 'left' }}>
-                                <th style={{ padding: '12px', color: '#4a5568' }}>Producto</th>
-                                <th style={{ padding: '12px', color: '#4a5568' }}>Tipo</th>
-                                <th style={{ padding: '12px', textAlign: 'right', color: '#4a5568' }}>Cantidad</th>
-                                <th style={{ padding: '12px', textAlign: 'center', color: '#4a5568' }}>Acción</th>
+                            <tr>
+                                <th>Producto</th>
+                                <th>Motivo</th>
+                                <th style={{ textAlign: 'right' }}>Cantidad</th>
+                                <th style={{ textAlign: 'center' }}>Acción</th>
                             </tr>
                         </thead>
                         <tbody>
                             {detalles.length === 0 ? (
                                 <tr>
-                                    <td colSpan="4" style={{ padding: '2rem', textAlign: 'center', color: '#a0aec0' }}>
-                                        No has agregado productos aún.
+                                    <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>
+                                        No hay ítems en esta guía
                                     </td>
                                 </tr>
                             ) : (
-                                detalles.map((d, index) => (
-                                    <tr key={index} style={{ borderBottom: '1px solid #edf2f7' }}>
-                                        <td style={{ padding: '12px' }}>
-                                            <strong>{d.productName}</strong>
-                                            <div style={{ fontSize: '0.85rem', color: '#718096' }}>{d.productSku}</div>
+                                detalles.map((d, i) => (
+                                    <tr key={i}>
+                                        <td data-label="Producto">
+                                            <strong>{d.productName}</strong><br/>
+                                            <small>{d.productSku}</small>
                                         </td>
-                                        <td style={{ padding: '12px' }}>
-                                            <span style={{ 
-                                                padding: '4px 8px', 
-                                                borderRadius: '6px', 
-                                                backgroundColor: d.tipoSalida === 'CONSUMO' ? '#c6f6d5' : '#fed7d7',
-                                                color: d.tipoSalida === 'CONSUMO' ? '#22543d' : '#822727'
-                                            }}>
+                                        <td data-label="Motivo">
+                                            <span className={`badge ${d.tipoSalida === 'MERMA' ? 'badge-merma' : 'badge-category'}`}>
                                                 {d.tipoSalida}
                                             </span>
                                         </td>
-                                        <td style={{ padding: '12px', textAlign: 'right' }}>
+                                        <td data-label="Cantidad" style={{ textAlign: 'right' }}>
                                             {d.cantidad} {d.unidad}
                                         </td>
-                                        <td style={{ padding: '12px', textAlign: 'center' }}>
+                                        <td data-label="Acción" style={{ textAlign: 'center' }}>
                                             <button 
-                                                onClick={() => handleEliminarDetalle(index)}
-                                                style={{ color: '#e53e3e', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
+                                                onClick={() => setDetalles(detalles.filter((_, idx) => idx !== i))}
+                                                style={{ color: '#e53e3e', background: 'none', border: 'none', cursor: 'pointer' }}
                                             >
                                                 Eliminar
                                             </button>
@@ -247,15 +241,8 @@ export default function GuiaConsumoPage() {
                 </div>
 
                 <div className="form-actions">
-                    <button onClick={() => navigate('/menu')} className="btn-secondary">
-                        Cancelar
-                    </button>
-                    <button 
-                        onClick={handleGuardarGuia} 
-                        className="btn-primary"
-                        disabled={detalles.length === 0}
-                    >
-                        💾 Guardar Guía
+                    <button onClick={handleGuardarGuia} className="btn-primary" disabled={detalles.length === 0}>
+                        💾 Finalizar y Descontar Inventario
                     </button>
                 </div>
             </div>

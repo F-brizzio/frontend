@@ -1,9 +1,12 @@
-import api from './api'; // Asegúrate de importar tu instancia de axios configurada
+import api from './api';
 
-// 1. Para la página de Inventario General (La tabla grande)
+/**
+ * 1. INVENTARIO COMPLETO
+ * Retorna todos los productos con su stock sumado y agrupado por área.
+ */
 export const getInventarioCompleto = async () => {
     try {
-        const response = await api.get('/inventory/completo');
+        const response = await api.get('/api/inventory/completo');
         return response.data;
     } catch (error) {
         console.error("Error en getInventarioCompleto:", error);
@@ -11,26 +14,61 @@ export const getInventarioCompleto = async () => {
     }
 };
 
-// 2. Para la Guía de Consumo (El error que te salía: getAllStock)
-// Nota: Usamos el mismo endpoint que el inventario completo porque necesitamos buscar en todo.
-export const getAllStock = async () => {
+/**
+ * 2. BÚSQUEDA DINÁMICA POR ÁREA (Para Guía de Consumo)
+ * Filtra productos que tengan stock disponible en una bodega específica.
+ */
+export const buscarStockPorArea = async (areaId, query) => {
     try {
-        const response = await api.get('/inventory/completo');
+        const response = await api.get(`/api/inventory/area/${areaId}/buscar`, {
+            params: { q: query }
+        });
         return response.data;
     } catch (error) {
-        console.error("Error en getAllStock:", error);
+        console.error("Error en buscarStockPorArea:", error);
         throw error;
     }
 };
 
-// 3. Para buscar stock solo de un área específica (Tambien lo pide tu página)
+/**
+ * 3. STOCK POR ÁREA (General)
+ * Retorna todo el stock de una ubicación específica.
+ */
 export const getStockByArea = async (areaId) => {
     try {
-        // Asegúrate de que en tu Java (Backend) tengas un endpoint tipo: @GetMapping("/area/{id}")
-        const response = await api.get(`/inventory/area/${areaId}`);
+        const response = await api.get(`/api/inventory/area/${areaId}`);
         return response.data;
     } catch (error) {
         console.error(`Error en getStockByArea (ID: ${areaId}):`, error);
+        throw error;
+    }
+};
+
+/**
+ * 4. AJUSTE MANUAL DE STOCK
+ * Envía la nueva cantidad física contada para corregir el sistema.
+ * @param {Object} ajusteDto - { productSku, areaId, nuevaCantidad, motivo }
+ */
+export const ajustarStock = async (ajusteDto) => {
+    try {
+        const response = await api.post('/api/inventory/ajuste', ajusteDto);
+        return response.data;
+    } catch (error) {
+        const msg = error.response?.data?.message || "No se pudo realizar el ajuste";
+        throw new Error(msg);
+    }
+};
+
+/**
+ * 5. DASHBOARD / RESUMEN (Opcional pero recomendado)
+ * Para obtener totales de valorización y alertas rápidamente.
+ */
+export const getInventorySummary = async () => {
+    try {
+        const response = await api.get('/api/inventory/summary');
+        return response.data;
+    } catch (error) {
+        console.error("Error en getInventorySummary:", error);
         throw error;
     }
 };
