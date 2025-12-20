@@ -2,7 +2,7 @@ import api from './api';
 
 /**
  * Obtiene todo el inventario agrupado para la tabla principal.
- * El backend devuelve InventarioDetalleDto (sku, nombre, categoría, areaId, areaNombre, cantidad, unidad, valor).
+ * Conecta con InventoryController -> @GetMapping("/api/inventory/completo")
  */
 export const getInventarioCompleto = async () => {
     try {
@@ -15,27 +15,37 @@ export const getInventarioCompleto = async () => {
 };
 
 /**
- * Realiza un ajuste manual de stock (corrección de inventario físico).
- * @param {Object} ajusteDto - { productSku, areaId, nuevaCantidad, motivo }
+ * Busca productos con stock real para la Guía de Consumo.
+ * Conecta con SalidaController -> @GetMapping("/api/salidas/buscar-productos")
+ * Soporta búsqueda global (Modo General) si areaId es null.
+ */
+export const buscarStockParaGuia = async (areaId, query) => {
+    try {
+        const response = await api.get('/api/salidas/buscar-productos', {
+            params: { 
+                areaId: areaId || undefined, // Envía undefined para que el backend no reciba el parámetro si es null
+                query: query 
+            }
+        });
+        return response.data;
+    } catch (error) {
+        console.error("Error en buscarStockParaGuia:", error);
+        throw error;
+    }
+};
+
+/**
+ * Realiza el ajuste manual de stock desde la tabla de inventario.
+ * Conecta con InventoryController -> @PostMapping("/api/inventory/ajuste")
+ * Requiere el DTO AjusteStockDto (productSku, areaId, nuevaCantidad, motivo)
  */
 export const ajustarStock = async (ajusteDto) => {
     try {
         const response = await api.post('/api/inventory/ajuste', ajusteDto);
         return response.data;
     } catch (error) {
-        // Capturamos el mensaje de error enviado por el backend (ej: "Cantidad negativa no permitida")
-        const msg = error.response?.data?.message || "No se pudo realizar el ajuste";
+        // Captura el mensaje de error personalizado del backend
+        const msg = error.response?.data?.message || "Error al realizar el ajuste";
         throw new Error(msg);
-    }
-};
-
-// Puedes mantener este si lo usas en algún dashboard, pero verifica que el endpoint exista en el Controller
-export const getInventorySummary = async () => {
-    try {
-        const response = await api.get('/api/inventory/summary');
-        return response.data;
-    } catch (error) {
-        console.error("Error en getInventorySummary:", error);
-        throw error;
     }
 };

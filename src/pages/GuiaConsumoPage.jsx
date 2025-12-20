@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAreas } from '../services/areaService';
-import { buscarStockParaGuia } from '../services/inventoryService'; // Asegúrate de tener este servicio
-import { procesarGuiaConsumo } from '../services/salidaService';
 import { useAuth } from '../context/AuthContext';
+import { getAreas } from '../services/areaService';
+import { buscarStockParaGuia, procesarGuiaConsumo } from '../services/salidaService';
 
 export default function GuiaConsumoPage() {
     const navigate = useNavigate();

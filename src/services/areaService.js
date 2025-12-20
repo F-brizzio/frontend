@@ -2,7 +2,7 @@ import api from './api';
 
 /**
  * Obtiene la lista de todas las áreas de trabajo (Casino, Coffee, etc.)
- * Llama al @GetMapping en AreaController
+ * Se conecta con @GetMapping("/api/areas") en el backend
  */
 export const getAreas = async () => {
     try {
@@ -15,16 +15,16 @@ export const getAreas = async () => {
 };
 
 /**
- * Registra una nueva área de trabajo en el sistema.
- * Llama al @PostMapping en AreaController
- * @param {Object} areaData - El objeto área (ej: { nombre: 'Nueva Área' })
+ * Registra una nueva área de trabajo.
+ * Se conecta con @PostMapping("/api/areas") en el backend
+ * @param {Object} areaData - Objeto con los datos del área, ej: { nombre: 'Nueva Área' }
  */
 export const createArea = async (areaData) => {
     try {
         const response = await api.post('/api/areas', areaData);
         return response.data;
     } catch (error) {
-        console.error("Error al crear área:", error);
+        // Captura el mensaje de error específico del backend si existe
         const msg = error.response?.data?.message || "No se pudo crear el área";
         throw new Error(msg);
     }
