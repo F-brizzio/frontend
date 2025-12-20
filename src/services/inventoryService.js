@@ -1,5 +1,8 @@
 import api from './api';
 
+/**
+ * Obtiene el inventario completo para la tabla principal.
+ */
 export const getInventarioCompleto = async () => {
     try {
         const response = await api.get('/api/inventory/completo');
@@ -10,22 +13,9 @@ export const getInventarioCompleto = async () => {
     }
 };
 
-// Esta función resuelve el error de importación en GuiaConsumoPage
-export const buscarStockParaGuia = async (areaId, query) => {
-    try {
-        const response = await api.get('/api/salidas/buscar-productos', {
-            params: { 
-                areaId: areaId || undefined, 
-                query: query 
-            }
-        });
-        return response.data;
-    } catch (error) {
-        console.error("Error en buscarStockParaGuia:", error);
-        throw error;
-    }
-};
-
+/**
+ * Realiza el ajuste manual de stock.
+ */
 export const ajustarStock = async (ajusteDto) => {
     try {
         const response = await api.post('/api/inventory/ajuste', ajusteDto);
