@@ -1,8 +1,8 @@
 import api from './api';
 
 /**
- * 1. INVENTARIO COMPLETO
- * Retorna todos los productos con su stock sumado y agrupado por área.
+ * Obtiene todo el inventario agrupado para la tabla principal.
+ * El backend devuelve InventarioDetalleDto (sku, nombre, categoría, areaId, areaNombre, cantidad, unidad, valor).
  */
 export const getInventarioCompleto = async () => {
     try {
@@ -15,38 +15,7 @@ export const getInventarioCompleto = async () => {
 };
 
 /**
- * 2. BÚSQUEDA DINÁMICA POR ÁREA (Para Guía de Consumo)
- * Filtra productos que tengan stock disponible en una bodega específica.
- */
-export const buscarStockPorArea = async (areaId, query) => {
-    try {
-        const response = await api.get(`/api/inventory/area/${areaId}/buscar`, {
-            params: { q: query }
-        });
-        return response.data;
-    } catch (error) {
-        console.error("Error en buscarStockPorArea:", error);
-        throw error;
-    }
-};
-
-/**
- * 3. STOCK POR ÁREA (General)
- * Retorna todo el stock de una ubicación específica.
- */
-export const getStockByArea = async (areaId) => {
-    try {
-        const response = await api.get(`/api/inventory/area/${areaId}`);
-        return response.data;
-    } catch (error) {
-        console.error(`Error en getStockByArea (ID: ${areaId}):`, error);
-        throw error;
-    }
-};
-
-/**
- * 4. AJUSTE MANUAL DE STOCK
- * Envía la nueva cantidad física contada para corregir el sistema.
+ * Realiza un ajuste manual de stock (corrección de inventario físico).
  * @param {Object} ajusteDto - { productSku, areaId, nuevaCantidad, motivo }
  */
 export const ajustarStock = async (ajusteDto) => {
@@ -54,15 +23,13 @@ export const ajustarStock = async (ajusteDto) => {
         const response = await api.post('/api/inventory/ajuste', ajusteDto);
         return response.data;
     } catch (error) {
+        // Capturamos el mensaje de error enviado por el backend (ej: "Cantidad negativa no permitida")
         const msg = error.response?.data?.message || "No se pudo realizar el ajuste";
         throw new Error(msg);
     }
 };
 
-/**
- * 5. DASHBOARD / RESUMEN (Opcional pero recomendado)
- * Para obtener totales de valorización y alertas rápidamente.
- */
+// Puedes mantener este si lo usas en algún dashboard, pero verifica que el endpoint exista en el Controller
 export const getInventorySummary = async () => {
     try {
         const response = await api.get('/api/inventory/summary');
