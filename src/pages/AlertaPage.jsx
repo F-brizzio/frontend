@@ -27,11 +27,9 @@ export default function AlertaPage() {
     };
 
     // --- LÓGICA DE CLASIFICACIÓN ---
-    // Aquí agrupamos los tipos que vienen del backend en tus 3 categorías visuales
     const getAlertasPorTipo = (tipoFiltro) => {
         return alertas.filter(a => {
             if (tipoFiltro === 'BAJO_STOCK') {
-                // Incluimos CRITICO y ADVERTENCIA aquí, asumiendo que son de stock bajo
                 return a.tipo === 'CRITICO' || a.tipo === 'ADVERTENCIA' || a.tipo === 'BAJO_STOCK';
             }
             if (tipoFiltro === 'SOBRE_STOCK') {
@@ -46,12 +44,10 @@ export default function AlertaPage() {
 
     const alertasVisibles = getAlertasPorTipo(filtroActual);
 
-    // Contadores para los botones (Badges)
     const countBajo = getAlertasPorTipo('BAJO_STOCK').length;
     const countSobre = getAlertasPorTipo('SOBRE_STOCK').length;
     const countVencer = getAlertasPorTipo('POR_VENCER').length;
 
-    // --- CONFIGURACIÓN VISUAL SEGÚN PESTAÑA ---
     const getConfig = () => {
         switch (filtroActual) {
             case 'BAJO_STOCK':
@@ -81,7 +77,7 @@ export default function AlertaPage() {
                 <button 
                     onClick={() => setFiltroActual('BAJO_STOCK')}
                     style={{
-                        padding: '15px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                        padding: '15px', borderRadius: '8px', cursor: 'pointer',
                         background: filtroActual === 'BAJO_STOCK' ? '#dc3545' : '#fff',
                         color: filtroActual === 'BAJO_STOCK' ? 'white' : '#dc3545',
                         border: '1px solid #dc3545',
@@ -90,7 +86,7 @@ export default function AlertaPage() {
                     }}
                 >
                     <span style={{fontSize:'1.2em'}}>📉 Bajo Stock</span>
-                    <span style={{background: filtroActual === 'BAJO_STOCK' ? 'rgba(255,255,255,0.3)' : '#dc3545', color: filtroActual === 'BAJO_STOCK' ? 'white' : 'white', padding:'2px 8px', borderRadius:'10px', fontSize:'0.8em'}}>
+                    <span style={{background: filtroActual === 'BAJO_STOCK' ? 'rgba(255,255,255,0.3)' : '#dc3545', color: 'white', padding:'2px 8px', borderRadius:'10px', fontSize:'0.8em'}}>
                         {countBajo}
                     </span>
                 </button>
@@ -99,7 +95,7 @@ export default function AlertaPage() {
                 <button 
                     onClick={() => setFiltroActual('SOBRE_STOCK')}
                     style={{
-                        padding: '15px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                        padding: '15px', borderRadius: '8px', cursor: 'pointer',
                         background: filtroActual === 'SOBRE_STOCK' ? '#0d6efd' : '#fff',
                         color: filtroActual === 'SOBRE_STOCK' ? 'white' : '#0d6efd',
                         border: '1px solid #0d6efd',
@@ -108,7 +104,7 @@ export default function AlertaPage() {
                     }}
                 >
                     <span style={{fontSize:'1.2em'}}>📈 Sobre Stock</span>
-                    <span style={{background: filtroActual === 'SOBRE_STOCK' ? 'rgba(255,255,255,0.3)' : '#0d6efd', color: filtroActual === 'SOBRE_STOCK' ? 'white' : 'white', padding:'2px 8px', borderRadius:'10px', fontSize:'0.8em'}}>
+                    <span style={{background: filtroActual === 'SOBRE_STOCK' ? 'rgba(255,255,255,0.3)' : '#0d6efd', color: 'white', padding:'2px 8px', borderRadius:'10px', fontSize:'0.8em'}}>
                         {countSobre}
                     </span>
                 </button>
@@ -117,7 +113,7 @@ export default function AlertaPage() {
                 <button 
                     onClick={() => setFiltroActual('POR_VENCER')}
                     style={{
-                        padding: '15px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                        padding: '15px', borderRadius: '8px', cursor: 'pointer',
                         background: filtroActual === 'POR_VENCER' ? '#fd7e14' : '#fff',
                         color: filtroActual === 'POR_VENCER' ? 'white' : '#fd7e14',
                         border: '1px solid #fd7e14',
@@ -126,7 +122,7 @@ export default function AlertaPage() {
                     }}
                 >
                     <span style={{fontSize:'1.2em'}}>⏳ Por Vencer</span>
-                    <span style={{background: filtroActual === 'POR_VENCER' ? 'rgba(255,255,255,0.3)' : '#fd7e14', color: filtroActual === 'POR_VENCER' ? 'white' : 'white', padding:'2px 8px', borderRadius:'10px', fontSize:'0.8em'}}>
+                    <span style={{background: filtroActual === 'POR_VENCER' ? 'rgba(255,255,255,0.3)' : '#fd7e14', color: 'white', padding:'2px 8px', borderRadius:'10px', fontSize:'0.8em'}}>
                         {countVencer}
                     </span>
                 </button>
@@ -183,9 +179,7 @@ export default function AlertaPage() {
                                 </p>
                             </div>
                             
-                            {/* BOTONES DE ACCIÓN SEGÚN EL TIPO DE PROBLEMA */}
                             <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: `1px solid ${config.border}`, textAlign: 'right' }}>
-                                
                                 {filtroActual === 'BAJO_STOCK' && (
                                     <button 
                                         onClick={() => navigate('/ingresos')}
@@ -197,7 +191,7 @@ export default function AlertaPage() {
 
                                 {filtroActual === 'SOBRE_STOCK' && (
                                     <button 
-                                        onClick={() => navigate('/guia-consumo')} // Sugerencia: Ir a sacar productos
+                                        onClick={() => navigate('/guia-consumo')} 
                                         style={{ width: '100%', background: 'white', border: `2px solid ${config.color}`, color: config.color, padding: '10px', borderRadius: '6px', cursor: 'pointer', fontWeight: '800', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
                                     >
                                         <span>📤</span> GESTIONAR SALIDA / OFERTA
@@ -206,13 +200,12 @@ export default function AlertaPage() {
 
                                 {filtroActual === 'POR_VENCER' && (
                                     <button 
-                                        onClick={() => navigate('/guia-consumo')} // Sugerencia: Dar salida antes que venza
+                                        onClick={() => navigate('/guia-consumo')} 
                                         style={{ width: '100%', background: 'white', border: `2px solid ${config.color}`, color: config.color, padding: '10px', borderRadius: '6px', cursor: 'pointer', fontWeight: '800', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
                                     >
                                         <span>⚡</span> PRIORIZAR USO
                                     </button>
                                 )}
-
                             </div>
                         </div>
                     ))}
