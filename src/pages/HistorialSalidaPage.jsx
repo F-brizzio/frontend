@@ -4,7 +4,6 @@ import { getSalidas, getDetalleSalida } from '../services/historialSalidaService
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-// Utilidad para formateo de moneda CLP profesional
 const formatCurrency = (amount) => {
     return new Intl.NumberFormat('es-CL', { 
         style: 'currency', 
@@ -17,11 +16,8 @@ export default function HistorialSalidaPage() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [historialResumen, setHistorialResumen] = useState([]);
-    
-    // --- CAMBIO: Filtro de fecha inicializado con la fecha de hoy ---
     const [fechaFiltro, setFechaFiltro] = useState(new Date().toISOString().split('T')[0]);
 
-    // Estados para el Modal y Detalle
     const [mostrarModal, setMostrarModal] = useState(false);
     const [guiaSeleccionada, setGuiaSeleccionada] = useState(null); 
     const [itemsDetalle, setItemsDetalle] = useState([]); 
@@ -89,7 +85,7 @@ export default function HistorialSalidaPage() {
         doc.save(`Guia_${guiaSeleccionada.folio}.pdf`);
     };
 
-    // --- LÓGICA DE FILTRADO POR FECHA ---
+    // Lógica de filtrado: si la fecha está vacía (borrada), muestra todo
     const datosFiltrados = historialResumen.filter(g => 
         !fechaFiltro || g.fecha === fechaFiltro
     );
@@ -100,26 +96,20 @@ export default function HistorialSalidaPage() {
             <div className="page-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px'}}>
                 <div>
                     <h2 style={{margin: 0, color: '#2d3748'}}>📜 Historial de Salidas</h2>
-                    <p style={{margin: 0, color: '#718096', fontSize: '0.9rem'}}>Consulta de guías por fecha seleccionada</p>
+                    <p style={{margin: 0, color: '#718096', fontSize: '0.9rem'}}>Gestión y descarga de guías de consumo</p>
                 </div>
                 <button onClick={() => navigate('/menu')} style={{padding: '10px 20px', cursor:'pointer', borderRadius:'6px', border:'1px solid #cbd5e0', background:'white'}}>⬅ Volver</button>
             </div>
 
-            {/* PANEL DE FILTRO DE FECHA */}
+            {/* Filtro de Fecha Simplificado */}
             <div className="filters-panel" style={{background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '15px'}}>
-                <label style={{fontWeight: 'bold', color: '#4a5568'}}>Filtrar por Fecha:</label>
+                <label style={{fontWeight: 'bold', color: '#4a5568'}}>Seleccionar Fecha:</label>
                 <input 
                     type="date" 
                     value={fechaFiltro} 
                     onChange={e => setFechaFiltro(e.target.value)}
                     style={{padding: '8px 15px', borderRadius: '5px', border: '1px solid #e2e8f0', fontSize: '1rem', color: '#2d3748'}}
                 />
-                <button 
-                    onClick={() => setFechaFiltro('')} 
-                    style={{background: 'none', border: 'none', color: '#3182ce', cursor: 'pointer', fontSize: '0.9rem', textDecoration: 'underline'}}
-                >
-                    Ver todas las fechas
-                </button>
             </div>
 
             {/* Tabla Principal */}
@@ -171,7 +161,7 @@ export default function HistorialSalidaPage() {
                         <div style={{padding: '20px 30px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                             <div>
                                 <h3 style={{margin: 0, color: '#2d3748'}}>DETALLE GUÍA {guiaSeleccionada.folio}</h3>
-                                <p style={{margin: 0, fontSize: '0.85rem', color: '#718096'}}>Emitida el {guiaSeleccionada.fecha}</p>
+                                <p style={{margin: 0, fontSize: '0.85rem', color: '#718096'}}>Responsable: {guiaSeleccionada.responsable}</p>
                             </div>
                             <button 
                                 onClick={exportarAPDF}
