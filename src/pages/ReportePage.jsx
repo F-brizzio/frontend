@@ -7,12 +7,11 @@ import {
     generarReporteVentaDiaria, 
     getOpcionesFiltro,
     getProductosInfo 
-} from '../services/reporteService'; //
-import MultiSelect from '../components/MultiSelect'; //
-import { useNavigate } from 'react-router-dom'; //
+} from '../services/reporteService';
+import MultiSelect from '../components/MultiSelect';
+import { useNavigate } from 'react-router-dom';
 
-// Importación de gráficos incluyendo Pie para torta y ArcElement
-import { Bar, Pie } from 'react-chartjs-2'; //
+import { Bar, Pie } from 'react-chartjs-2'; 
 import { 
     Chart as ChartJS, 
     CategoryScale, 
@@ -22,17 +21,17 @@ import {
     Tooltip, 
     Legend, 
     ArcElement 
-} from 'chart.js'; //
-import html2canvas from 'html2canvas'; //
-import jsPDF from 'jspdf'; //
-import autoTable from 'jspdf-autotable'; //
+} from 'chart.js'; 
+import html2canvas from 'html2canvas'; 
+import jsPDF from 'jspdf'; 
+import autoTable from 'jspdf-autotable'; 
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement); //
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement); 
 
 export default function ReportePage() {
     const navigate = useNavigate();
     
-    // --- ESTADOS ORIGINALES PRESERVADOS ---
+    // --- ESTADOS ---
     const [tipoReporte, setTipoReporte] = useState('GASTOS'); 
     const [entidadFiltro, setEntidadFiltro] = useState('CATEGORIA');
     const [fechaInicio, setFechaInicio] = useState(new Date().toISOString().split('T')[0]);
@@ -49,7 +48,6 @@ export default function ReportePage() {
     const [chartData, setChartData] = useState(null);
     const [tablaData, setTablaData] = useState([]);
 
-    // --- CARGA DE DATOS Y FILTROS INTELIGENTES ---
     useEffect(() => {
         async function init() {
             try { setMaestroProductos(await getProductosInfo()); } catch (e) { console.error(e); }
@@ -94,7 +92,9 @@ export default function ReportePage() {
         setOpcionesDisponibles(filtrados.map(p => ({ value: `${p.sku} - ${p.nombre}`, label: `${p.sku} - ${p.nombre}` })));
     }, [subFiltroTipo, subFiltroValor, maestroProductos, entidadFiltro]);
 
-    // --- GENERACIÓN DE REPORTES ---
+    // Recalcular gráfico si cambia la opción de mermas
+    useEffect(() => { if (tablaData.length > 0) procesarGrafico(tablaData); }, [incluirMerma]);
+
     const handleGenerar = async () => {
         setTablaData([]); setChartData(null);
         try {
@@ -120,25 +120,24 @@ export default function ReportePage() {
         const labels = datos.map(d => d.concepto || d.label || d.fecha);
         const colores = ['#3182ce', '#38a169', '#d69e2e', '#e53e3e', '#805ad5', '#319795', '#718096'];
 
-        if ((tipoReporte === 'GASTOS' || tipoReporte === 'CONSUMO') && entidadFiltro !== 'PRODUCTO') {
-            setChartData({
-                labels,
-                datasets: [{
-                    label: 'Total ($)',
-                    data: datos.map(d => tipoReporte === 'GASTOS' ? d.totalGastado : d.valorConsumo),
-                    backgroundColor: colores,
-                }]
-            });
+        if (tipoReporte === 'CONSUMO' && entidadFiltro !== 'PRODUCTO') {
+            const datasets = [{ label: 'Consumo ($)', data: datos.map(d => d.valorConsumo), backgroundColor: '#38a169' }];
+            if (incluirMerma) datasets.push({ label: 'Merma ($)', data: datos.map(d => d.valorMerma), backgroundColor: '#e53e3e' });
+            
+            // Si hay mermas usamos barras comparativas, si no, torta
+            if (incluirMerma) setChartData({ labels, datasets });
+            else setChartData({ labels, datasets: [{ label: 'Total ($)', data: datos.map(d => d.valorConsumo), backgroundColor: colores }] });
+        } else if (tipoReporte === 'GASTOS' && entidadFiltro !== 'PRODUCTO') {
+            setChartData({ labels, datasets: [{ label: 'Total ($)', data: datos.map(d => d.totalGastado), backgroundColor: colores }] });
         } else if (tipoReporte === 'COMPARATIVO') {
             setChartData({ labels, datasets: [{ label: 'Ingresos ($)', data: datos.map(d => d.ingresoDinero), backgroundColor: '#28a745' }, { label: 'Guías ($)', data: datos.map(d => d.salidaDinero), backgroundColor: '#dc3545' }] });
         } else if (tipoReporte === 'VENTA_DIARIA') {
             setChartData({ labels, datasets: [{ label: 'Venta Diaria ($)', data: datos.map(d => d.valorTotal), backgroundColor: '#007bff' }] });
         } else {
-            setChartData(null); // No hay gráfico para Stock Valorizado o vistas por producto de Ingreso/Consumo
+            setChartData(null);
         }
     };
 
-    // --- EXPORTACIÓN PDF ---
     const descargarPDF = async () => {
         const doc = new jsPDF();
         const headerElement = document.getElementById('report-header-section'); 
@@ -165,8 +164,15 @@ export default function ReportePage() {
             head = [['Concepto', 'Stock Actual', 'Valor Total ($)']];
             body = tablaData.map(d => [d.label || d.concepto, d.stockActual?.toLocaleString(), `$${Math.round(d.valorTotal||0).toLocaleString()}`]);
         } else if (tipoReporte === 'COMPARATIVO') {
-            head = [['Concepto', 'Ingreso ($)', 'Guía ($)', 'Balance ($)']];
-            body = tablaData.map(d => [d.label || d.concepto, `$${d.ingresoDinero?.toLocaleString()}`, `$${d.salidaDinero?.toLocaleString()}`, `$${(d.ingresoDinero - d.salidaDinero).toLocaleString()}`]);
+            head = [['Concepto', 'Ing. (U)', 'Ing. ($)', 'Guía (U)', 'Guía ($)', 'Balance ($)']];
+            body = tablaData.map(d => [
+                d.label || d.concepto, 
+                d.ingresoCantidad?.toLocaleString(),
+                `$${d.ingresoDinero?.toLocaleString()}`, 
+                d.salidaCantidad?.toLocaleString(),
+                `$${d.salidaDinero?.toLocaleString()}`,
+                `$${(d.ingresoDinero - d.salidaDinero).toLocaleString()}`
+            ]);
         } else {
             head = [['Fecha', 'Venta ($)', 'Unidades']];
             body = tablaData.map(d => [d.fecha, `$${Math.round(d.valorTotal||0).toLocaleString()}`, d.cantidadTotal?.toLocaleString()]);
@@ -195,7 +201,6 @@ export default function ReportePage() {
                 <button onClick={() => navigate('/menu')} className="back-btn">⬅ Volver</button>
             </div>
 
-            {/* PANEL DE FILTROS */}
             <div className="filters-panel">
                 <div className="filter-group">
                     <label className="filter-label">1. Tipo Reporte</label>
@@ -207,6 +212,17 @@ export default function ReportePage() {
                         <option value="VENTA_DIARIA">📈 Evolución Ventas</option>
                     </select>
                 </div>
+
+                {/* 1) RESTAURADA OPCIÓN DE MERMA */}
+                {tipoReporte === 'CONSUMO' && (
+                    <div className="filter-group" style={{ justifyContent:'flex-end' }}>
+                        <label className="filter-label" style={{opacity:0}}>.</label>
+                        <div style={{display:'flex', alignItems:'center', background:'white', padding:'10px', borderRadius:'6px', border:'1px solid #e2e8f0'}}>
+                            <input type="checkbox" checked={incluirMerma} onChange={e => setIncluirMerma(e.target.checked)} style={{width:'20px', height:'20px', marginRight:'10px'}}/>
+                            <span style={{fontWeight:'600', color: incluirMerma ? '#dc3545' : '#4a5568'}}>Ver Mermas</span>
+                        </div>
+                    </div>
+                )}
 
                 {tipoReporte !== 'VENTA_DIARIA' && (
                     <div className="filter-group">
@@ -229,7 +245,7 @@ export default function ReportePage() {
                     <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} className="filter-input" />
                 </div>
 
-                {/* SUB-FILTROS INTELIGENTES */}
+                {/* SUB-FILTROS */}
                 {tipoReporte !== 'VENTA_DIARIA' && entidadFiltro === 'PRODUCTO' && (
                     <div className="filter-group" style={{ gridColumn: '1 / -1' }}>
                         <div style={{ background: '#f7fafc', padding: '15px', borderRadius: '8px', border: '1px solid #edf2f7' }}>
@@ -279,7 +295,7 @@ export default function ReportePage() {
                             
                             <div style={{ height: chartData ? '350px' : 'auto', marginBottom: chartData ? '40px' : '0' }}>
                                 {chartData ? (
-                                    tipoReporte === 'COMPARATIVO' || tipoReporte === 'VENTA_DIARIA' ? 
+                                    (tipoReporte === 'COMPARATIVO' || incluirMerma || tipoReporte === 'VENTA_DIARIA') ? 
                                     <Bar data={chartData} options={{ responsive: true, maintainAspectRatio: false }} /> :
                                     <Pie data={chartData} options={{ responsive: true, maintainAspectRatio: false, plugins:{ legend:{ position:'right' } } }} />
                                 ) : (
@@ -294,9 +310,20 @@ export default function ReportePage() {
                                     <tr>
                                         <th>Concepto</th>
                                         {tipoReporte === 'GASTOS' && <><th style={{textAlign:'right'}}>Unidades</th><th style={{textAlign:'right'}}>Total Ingreso ($)</th></>}
-                                        {tipoReporte === 'CONSUMO' && <><th style={{textAlign:'right'}}>Unidades</th><th style={{textAlign:'right'}}>Total ($)</th></>}
+                                        {tipoReporte === 'CONSUMO' && <><th style={{textAlign:'right'}}>Unid. Consumo</th><th style={{textAlign:'right'}}>Costo Consumo ($)</th>{incluirMerma && <><th style={{textAlign:'right', color:'#dc3545'}}>Unid. Merma</th><th style={{textAlign:'right', color:'#dc3545'}}>Costo Merma ($)</th></>}</>}
                                         {tipoReporte === 'STOCK_FINAL' && <><th style={{textAlign:'right'}}>Stock Actual</th><th style={{textAlign:'right'}}>Valor Total ($)</th></>}
-                                        {tipoReporte === 'COMPARATIVO' && <><th style={{textAlign:'right'}}>Ingreso ($)</th><th style={{textAlign:'right'}}>Guía ($)</th><th style={{textAlign:'right'}}>Balance ($)</th></>}
+                                        
+                                        {/* 2) CANTIDADES AGREGADAS EN COMPARATIVO */}
+                                        {tipoReporte === 'COMPARATIVO' && (
+                                            <>
+                                                <th style={{textAlign:'right'}}>Ing. (U)</th>
+                                                <th style={{textAlign:'right'}}>Ing. ($)</th>
+                                                <th style={{textAlign:'right'}}>Guía (U)</th>
+                                                <th style={{textAlign:'right'}}>Guía ($)</th>
+                                                <th style={{textAlign:'right'}}>Balance ($)</th>
+                                            </>
+                                        )}
+                                        
                                         {tipoReporte === 'VENTA_DIARIA' && <><th style={{textAlign:'right'}}>Unidades Vendidas</th><th style={{textAlign:'right'}}>Venta Total ($)</th></>}
                                     </tr>
                                 </thead>
@@ -305,25 +332,46 @@ export default function ReportePage() {
                                         <tr key={i}>
                                             <td style={{fontWeight:'bold'}}>{d.label || d.concepto || d.fecha}</td>
                                             {tipoReporte === 'GASTOS' && <><td style={{textAlign:'right'}}>{d.unidadesCompradas?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.totalGastado).toLocaleString()}</td></>}
-                                            {tipoReporte === 'CONSUMO' && <><td style={{textAlign:'right'}}>{d.cantConsumo?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.valorConsumo).toLocaleString()}</td></>}
+                                            {tipoReporte === 'CONSUMO' && <><td style={{textAlign:'right'}}>{d.cantConsumo?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.valorConsumo).toLocaleString()}</td>{incluirMerma && <><td style={{textAlign:'right'}}>{d.cantMerma?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.valorMerma).toLocaleString()}</td></>}</>}
                                             {tipoReporte === 'STOCK_FINAL' && <><td style={{textAlign:'right'}}>{d.stockActual?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.valorTotal).toLocaleString()}</td></>}
-                                            {tipoReporte === 'COMPARATIVO' && <><td style={{textAlign:'right'}}>${d.ingresoDinero?.toLocaleString()}</td><td style={{textAlign:'right'}}>${d.salidaDinero?.toLocaleString()}</td><td style={{textAlign:'right', fontWeight:'bold', color: (d.ingresoDinero - d.salidaDinero) >= 0 ? '#2f855a' : '#e53e3e'}}>${(d.ingresoDinero - d.salidaDinero).toLocaleString()}</td></>}
+                                            
+                                            {/* 2) VALORES DE CANTIDAD AGREGADOS */}
+                                            {tipoReporte === 'COMPARATIVO' && (
+                                                <>
+                                                    <td style={{textAlign:'right'}}>{d.ingresoCantidad?.toLocaleString()}</td>
+                                                    <td style={{textAlign:'right'}}>${d.ingresoDinero?.toLocaleString()}</td>
+                                                    <td style={{textAlign:'right'}}>{d.salidaCantidad?.toLocaleString()}</td>
+                                                    <td style={{textAlign:'right'}}>${d.salidaDinero?.toLocaleString()}</td>
+                                                    <td style={{textAlign:'right', fontWeight:'bold', color: (d.ingresoDinero - d.salidaDinero) >= 0 ? '#2f855a' : '#e53e3e'}}>${(d.ingresoDinero - d.salidaDinero).toLocaleString()}</td>
+                                                </>
+                                            )}
+                                            
                                             {tipoReporte === 'VENTA_DIARIA' && <><td style={{textAlign:'right'}}>{d.cantidadTotal?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.valorTotal).toLocaleString()}</td></>}
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                             
-                            <div style={{ padding: '20px', textAlign: 'right', background: '#f8fafc', borderTop: '2px solid #e2e8f0' }}>
+                            {/* 3) TOTALES EN HORIZONTAL */}
+                            <div style={{ 
+                                padding: '20px', 
+                                background: '#f8fafc', 
+                                borderTop: '2px solid #e2e8f0',
+                                display: 'flex',
+                                justifyContent: 'flex-end',
+                                gap: '30px',
+                                flexWrap: 'wrap',
+                                alignItems: 'center'
+                            }}>
                                 {tipoReporte === 'GASTOS' && <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>TOTAL INGRESO: ${Math.round(t.ingreso).toLocaleString()}</span>}
                                 {tipoReporte === 'CONSUMO' && <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>TOTAL GUÍA: ${Math.round(t.guia).toLocaleString()}</span>}
                                 {tipoReporte === 'STOCK_FINAL' && <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>TOTAL VALORIZADO: ${Math.round(t.stock).toLocaleString()}</span>}
                                 {tipoReporte === 'COMPARATIVO' && (
-                                    <div style={{ display:'flex', flexDirection:'column', gap:'5px', fontWeight:'bold' }}>
-                                        <span>TOTAL INGRESO: ${t.ingreso.toLocaleString()}</span>
-                                        <span>TOTAL GUÍA: ${t.guia.toLocaleString()}</span>
-                                        <span style={{ fontSize:'1.2rem', color: (t.ingreso - t.guia) >= 0 ? '#2f855a' : '#e53e3e' }}>BALANCE TOTAL: ${(t.ingreso - t.guia).toLocaleString()}</span>
-                                    </div>
+                                    <>
+                                        <span style={{ fontWeight:'bold' }}>TOTAL INGRESO: ${t.ingreso.toLocaleString()}</span>
+                                        <span style={{ fontWeight:'bold' }}>TOTAL GUÍA: ${t.guia.toLocaleString()}</span>
+                                        <span style={{ fontSize:'1.2rem', fontWeight:'bold', color: (t.ingreso - t.guia) >= 0 ? '#2f855a' : '#e53e3e' }}>BALANCE TOTAL: ${(t.ingreso - t.guia).toLocaleString()}</span>
+                                    </>
                                 )}
                                 {tipoReporte === 'VENTA_DIARIA' && <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#007bff' }}>TOTAL VENTAS: ${Math.round(t.venta).toLocaleString()}</span>}
                             </div>
