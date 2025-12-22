@@ -10,14 +10,12 @@ export default function GuiaConsumoPage() {
     const navigate = useNavigate();
     const { user } = useAuth();
     
-    // Referencia para hacer scroll automático al editar
     const formRef = useRef(null);
 
     // --- ESTADOS ---
     const [areas, setAreas] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    // Pasos 1, 2 y 3: Cabecera
     const [encabezado, setEncabezado] = useState({
         fecha: new Date().toISOString().split('T')[0],
         areaOrigenId: '', 
@@ -25,7 +23,6 @@ export default function GuiaConsumoPage() {
         tipoSalida: 'CONSUMO'
     });
 
-    // Pasos 4, 5 y 6: Selección de ítem
     const [productoActual, setProductoActual] = useState({
         sku: '', nombre: '', cantidad: '', unidad: '', stockDisponible: 0, 
         areaOrigenId: null, areaOrigenNombre: '', areaDestinoId: ''
@@ -37,12 +34,10 @@ export default function GuiaConsumoPage() {
 
     const esModoGeneral = encabezado.areaOrigenId === 'GENERAL';
 
-    // Carga inicial
     useEffect(() => {
         getAreas().then(setAreas).catch(console.error);
     }, []);
 
-    // Búsqueda dinámica
     useEffect(() => {
         const timer = setTimeout(async () => {
             if (busqueda.length > 1 && encabezado.areaOrigenId) {
@@ -56,7 +51,6 @@ export default function GuiaConsumoPage() {
         return () => clearTimeout(timer);
     }, [busqueda, encabezado.areaOrigenId, esModoGeneral]);
 
-    // Selección del producto
     const seleccionarProducto = (p) => {
         setProductoActual({
             ...productoActual,
@@ -66,16 +60,13 @@ export default function GuiaConsumoPage() {
             stockDisponible: p.cantidadTotal,
             areaOrigenId: p.areaId,       
             areaOrigenNombre: p.areaNombre,
-            // Importante: Si editamos, mantenemos el destino previo si existe, si no, vacío
             areaDestinoId: productoActual.areaDestinoId 
         });
         setBusqueda(`${p.nombreProducto} (${p.areaNombre})`);
         setSugerencias([]);
     };
 
-    // Paso 7: Añadir ítem
     const agregarItem = () => {
-        // Validaciones
         if (!productoActual.sku || !productoActual.cantidad) {
             return alert("⚠️ Por favor, complete el producto y la cantidad.");
         }
@@ -88,59 +79,45 @@ export default function GuiaConsumoPage() {
             return alert(`❌ Stock insuficiente en ${productoActual.areaOrigenNombre}. Disponible: ${productoActual.stockDisponible}`);
         }
 
-        // Definir nombre de destino visual
         let nombreDestino = "Consumo en Origen";
         if (esModoGeneral) {
             nombreDestino = areas.find(a => a.id.toString() === productoActual.areaDestinoId)?.nombre || 'Desconocido';
         }
 
         const nuevoItem = {
-            ...productoActual, // Guardamos TODO el estado actual (incluyendo stockDisponible y IDs)
+            ...productoActual, 
             fecha: encabezado.fecha,
             cantidad: cant,
             areaDestinoNombre: nombreDestino
         };
 
         setDetalles([...detalles, nuevoItem]);
-        
-        // Limpiar formulario
         setProductoActual({ sku: '', nombre: '', cantidad: '', unidad: '', stockDisponible: 0, areaOrigenId: null, areaOrigenNombre: '', areaDestinoId: '' });
         setBusqueda('');
     };
 
-    // --- NUEVA FUNCIÓN: EDITAR ÍTEM ---
     const editarItem = (index) => {
         const item = detalles[index];
-
-        // 1. Cargamos los datos de vuelta al formulario (Estado productoActual)
         setProductoActual({
             sku: item.sku,
             nombre: item.nombre,
             cantidad: item.cantidad,
             unidad: item.unidad,
-            stockDisponible: item.stockDisponible, // Recuperamos el stock original que guardamos
+            stockDisponible: item.stockDisponible, 
             areaOrigenId: item.areaOrigenId,
             areaOrigenNombre: item.areaOrigenNombre,
-            areaDestinoId: item.areaDestinoId || '' // Recuperamos el ID del destino
+            areaDestinoId: item.areaDestinoId || '' 
         });
-
-        // 2. Restauramos el texto del buscador
         setBusqueda(`${item.nombre} (${item.areaOrigenNombre})`);
-
-        // 3. Eliminamos el ítem de la lista (para que no se duplique al guardar)
         const nuevaLista = detalles.filter((_, i) => i !== index);
         setDetalles(nuevaLista);
-
-        // 4. Scroll suave hacia el formulario para que el usuario vea dónde editar
         if(formRef.current) {
             formRef.current.scrollIntoView({ behavior: 'smooth' });
         }
     };
 
-    // Envío final
     const finalizarGuia = async () => {
         if (detalles.length === 0) return alert("La guía está vacía.");
-        
         setIsSubmitting(true);
         const payload = {
             areaOrigenId: esModoGeneral ? null : parseInt(encabezado.areaOrigenId),
@@ -162,6 +139,18 @@ export default function GuiaConsumoPage() {
         } catch (error) {
             alert("❌ " + error.message);
         } finally { setIsSubmitting(false); }
+    };
+
+    // --- ESTILO PARA LOS TEXTOS DEL DETALLE (Unificado con el Origen) ---
+    const detailBadgeStyle = {
+        padding: '4px 10px',
+        backgroundColor: '#ebf8ff', // Azul clarito
+        color: '#2b6cb0',       // Azul oscuro
+        borderRadius: '6px',
+        fontSize: '0.75rem',
+        fontWeight: 'bold',
+        display: 'inline-block',
+        whiteSpace: 'nowrap'    // Evita que el texto se rompa en dos líneas
     };
 
     return (
@@ -190,7 +179,7 @@ export default function GuiaConsumoPage() {
                                     areaOrigenId: e.target.value,
                                     areaOrigenNombre: area ? area.nombre : 'GENERAL'
                                 });
-                                setDetalles([]); // Limpiar tabla por seguridad al cambiar origen mayor
+                                setDetalles([]); 
                             }}
                         >
                             <option value="">-- Seleccione --</option>
@@ -208,7 +197,7 @@ export default function GuiaConsumoPage() {
                 </div>
             </div>
 
-            {/* SECCIÓN PRODUCTO (Ref added for scroll) */}
+            {/* SECCIÓN PRODUCTO */}
             <div ref={formRef} className="form-card" style={{
                 padding: '25px', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', marginBottom: '25px', borderTop: '5px solid #38a169',
                 opacity: encabezado.areaOrigenId ? 1 : 0.5, pointerEvents: encabezado.areaOrigenId ? 'auto' : 'none'
@@ -260,55 +249,56 @@ export default function GuiaConsumoPage() {
                 </div>
             </div>
 
-            {/* DETALLE CON BOTÓN DE EDITAR */}
+            {/* DETALLE ACTUALIZADO (Sin Neto y con estilos unificados) */}
             {detalles.length > 0 && (
                 <div className="form-card" style={{padding: '25px', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)'}}>
-                    <h3 style={{marginTop: 0, marginBottom: '20px', fontSize: '1.2rem', color: '#2d3748', textTransform: 'uppercase', fontWeight: 'bold'}}>8) Detalle</h3>
-                    <table style={{width: '100%', borderCollapse: 'collapse'}}>
+                    <h3 style={{marginTop: 0, marginBottom: '20px', fontSize: '1.2rem', color: '#2d3748', textTransform: 'uppercase', fontWeight: 'bold'}}>8) Detalle de Consumos</h3>
+                    <table style={{width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed'}}> {/* tableLayout fixed ayuda a controlar anchos */}
                         <thead>
                             <tr style={{textAlign: 'left', borderBottom: '2px solid #edf2f7', color: '#718096', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em'}}>
-                                <th style={{padding: '12px'}}>Fecha</th>
-                                <th style={{padding: '12px'}}>Producto</th>
-                                <th style={{padding: '12px'}}>Cantidad</th>
-                                <th style={{padding: '12px'}}>Origen</th>
-                                <th style={{padding: '12px'}}>Destino</th>
-                                <th style={{padding: '12px', textAlign: 'right'}}>Valor Neto</th>
-                                <th style={{padding: '12px', textAlign: 'center'}}>Acción</th>
+                                <th style={{padding: '12px', width: '12%'}}>Fecha</th>
+                                <th style={{padding: '12px', width: '25%'}}>Producto</th>
+                                <th style={{padding: '12px', width: '12%'}}>Cantidad</th>
+                                <th style={{padding: '12px', width: '15%'}}>Origen</th>
+                                <th style={{padding: '12px', width: '20%'}}>Destino</th>
+                                <th style={{padding: '12px', width: '10%', textAlign: 'center'}}>Método</th>
+                                <th style={{padding: '12px', width: '6%', textAlign: 'center'}}>Acción</th>
                             </tr>
                         </thead>
                         <tbody>
                             {detalles.map((item, idx) => (
                                 <tr key={idx} style={{borderBottom: '1px solid #f1f5f9'}}>
-                                    <td style={{padding: '15px'}}>{item.fecha}</td>
-                                    <td style={{padding: '15px'}}><strong>{item.nombre}</strong></td>
-                                    <td style={{padding: '15px'}}>{item.cantidad} {item.unidad}</td>
+                                    <td style={{padding: '15px', fontSize: '0.9rem'}}>{item.fecha}</td>
                                     <td style={{padding: '15px'}}>
-                                        <span style={{padding: '4px 8px', backgroundColor: '#ebf8ff', color: '#2b6cb0', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold'}}>
+                                        <strong style={{textTransform: 'uppercase', color: '#1a202c'}}>{item.nombre}</strong>
+                                    </td>
+                                    <td style={{padding: '15px', fontWeight: 'bold', color: '#2d3748'}}>{item.cantidad} {item.unidad}</td>
+                                    
+                                    {/* ORIGEN (Azul) */}
+                                    <td style={{padding: '15px'}}>
+                                        <span style={detailBadgeStyle}>
                                             {item.areaOrigenNombre}
                                         </span>
                                     </td>
-                                    <td style={{padding: '15px', color: item.areaDestinoNombre === 'Consumo en Origen' ? '#718096' : 'inherit'}}>
-                                        {item.areaDestinoNombre}
+
+                                    {/* DESTINO (Ahora con el mismo estilo que origen para unificar) */}
+                                    <td style={{padding: '15px'}}>
+                                        <span style={{...detailBadgeStyle, backgroundColor: '#f7fafc', color: '#4a5568', border: '1px solid #e2e8f0'}}>
+                                            {item.areaDestinoNombre}
+                                        </span>
                                     </td>
-                                    <td style={{padding: '15px', textAlign: 'right', color: '#718096'}}><em>FIFO (Auto)</em></td>
+
+                                    {/* MÉTODO (Sin cursiva, estilo limpio) */}
                                     <td style={{padding: '15px', textAlign: 'center'}}>
-                                        <div style={{display: 'flex', gap: '10px', justifyContent: 'center'}}>
-                                            {/* BOTÓN EDITAR */}
-                                            <button 
-                                                onClick={() => editarItem(idx)} 
-                                                title="Editar"
-                                                style={{color: '#3182ce', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem'}}
-                                            >
-                                                ✏️
-                                            </button>
-                                            {/* BOTÓN ELIMINAR */}
-                                            <button 
-                                                onClick={() => setDetalles(detalles.filter((_, i) => i !== idx))} 
-                                                title="Eliminar"
-                                                style={{color: '#e53e3e', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem'}}
-                                            >
-                                                🗑️
-                                            </button>
+                                        <span style={{fontSize: '0.75rem', fontWeight: 'bold', color: '#a0aec0'}}>
+                                            FIFO (Auto)
+                                        </span>
+                                    </td>
+
+                                    <td style={{padding: '15px', textAlign: 'center'}}>
+                                        <div style={{display: 'flex', gap: '15px', justifyContent: 'center'}}>
+                                            <button onClick={() => editarItem(idx)} title="Editar" style={{color: '#ecc94b', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem'}}>✏️</button>
+                                            <button onClick={() => setDetalles(detalles.filter((_, i) => i !== idx))} title="Eliminar" style={{color: '#f56565', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem'}}>🗑️</button>
                                         </div>
                                     </td>
                                 </tr>
@@ -320,9 +310,9 @@ export default function GuiaConsumoPage() {
                         <button 
                             onClick={finalizarGuia} 
                             disabled={isSubmitting} 
-                            style={{padding: '18px 60px', backgroundColor: isSubmitting ? '#a0aec0' : '#2d3748', color: 'white', borderRadius: '10px', fontSize: '1rem', fontWeight: 'bold', border: 'none', cursor: isSubmitting ? 'not-allowed' : 'pointer'}}
+                            style={{padding: '18px 60px', backgroundColor: isSubmitting ? '#a0aec0' : '#2d3748', color: 'white', borderRadius: '10px', fontSize: '1rem', fontWeight: 'bold', border: 'none', cursor: isSubmitting ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}}
                         >
-                            {isSubmitting ? "⌛ PROCESANDO..." : "✅ FINALIZAR TODO"}
+                            {isSubmitting ? "⌛ PROCESANDO..." : "✅ FINALIZAR Y ACTUALIZAR STOCK"}
                         </button>
                     </div>
                 </div>
