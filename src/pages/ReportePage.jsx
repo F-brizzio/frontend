@@ -22,7 +22,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend,
 export default function ReportePage() {
     const navigate = useNavigate();
     
-    // --- ESTADOS ORIGINALES RECUPERADOS ---
+    // --- ESTADOS ---
     const [tipoReporte, setTipoReporte] = useState('GASTOS'); 
     const [entidadFiltro, setEntidadFiltro] = useState('CATEGORIA');
     const [fechaInicio, setFechaInicio] = useState(new Date().toISOString().split('T')[0]);
@@ -39,7 +39,7 @@ export default function ReportePage() {
     const [chartData, setChartData] = useState(null);
     const [tablaData, setTablaData] = useState([]);
 
-    // --- EFECTOS ORIGINALES RECUPERADOS ---
+    // --- CARGA INICIAL Y FILTROS ---
     useEffect(() => {
         async function init() {
             try { setMaestroProductos(await getProductosInfo()); } catch (e) { console.error(e); }
@@ -84,6 +84,7 @@ export default function ReportePage() {
         setOpcionesDisponibles(filtrados.map(p => ({ value: `${p.sku} - ${p.nombre}`, label: `${p.sku} - ${p.nombre}` })));
     }, [subFiltroTipo, subFiltroValor, maestroProductos, entidadFiltro]);
 
+    // --- LÓGICA DE NEGOCIO ---
     const handleGenerar = async () => {
         setTablaData([]); setChartData(null);
         try {
@@ -118,10 +119,8 @@ export default function ReportePage() {
                     backgroundColor: colores,
                 }]
             });
-        } else if (tipoReporte === 'CONSUMO' && entidadFiltro === 'PRODUCTO') {
-            setChartData(null); // Producto en consumo no lleva gráfico
-        } else if (tipoReporte === 'GASTOS' && entidadFiltro === 'PRODUCTO') {
-            setChartData(null); // Producto en ingreso no lleva gráfico
+        } else if (tipoReporte === 'GASTOS' || tipoReporte === 'CONSUMO') {
+            setChartData(null); // Sin gráfico para productos en estos reportes
         } else if (tipoReporte === 'COMPARATIVO') {
             setChartData({ labels, datasets: [{ label: 'Ingresos ($)', data: datos.map(d => d.ingresoDinero), backgroundColor: '#28a745' }, { label: 'Salidas ($)', data: datos.map(d => d.salidaDinero), backgroundColor: '#dc3545' }] });
         } else if (tipoReporte === 'VENTA_DIARIA') {
@@ -154,9 +153,8 @@ export default function ReportePage() {
                 `$${Math.round(tipoReporte === 'GASTOS' ? d.totalGastado : d.valorConsumo).toLocaleString()}`
             ]);
         } else {
-            // Estructura original para otros reportes
             head = [['Concepto', 'Valor']];
-            body = tablaData.map(d => [d.label || d.concepto || d.fecha, d.valorTotal || d.stockActual]);
+            body = tablaData.map(d => [d.label || d.concepto || d.fecha, (d.valorTotal || d.stockActual)?.toLocaleString()]);
         }
 
         autoTable(doc, { startY, head, body, theme: 'striped', headStyles: { fillColor: [52, 58, 64] } });
@@ -168,8 +166,7 @@ export default function ReportePage() {
         tablaData.forEach(d => {
             if (tipoReporte === 'GASTOS') total += (d.totalGastado || 0);
             else if (tipoReporte === 'CONSUMO') total += (d.valorConsumo || 0);
-            else if (tipoReporte === 'STOCK_FINAL') total += (d.valorTotal || 0);
-            else total += (d.valorTotal || 0);
+            else total += (d.valorTotal || d.stockActual || 0);
         });
         return total;
     };
@@ -181,7 +178,6 @@ export default function ReportePage() {
                 <button onClick={() => navigate('/menu')} className="back-btn">⬅ Volver</button>
             </div>
 
-            {/* --- PANEL DE FILTROS ORIGINAL COMPLETO --- */}
             <div className="filters-panel">
                 <div className="filter-group">
                     <label className="filter-label">1. Tipo Reporte</label>
@@ -215,7 +211,6 @@ export default function ReportePage() {
                     <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} className="filter-input" />
                 </div>
 
-                {/* --- SUB-FILTROS INTELIGENTES RECUPERADOS --- */}
                 {tipoReporte !== 'VENTA_DIARIA' && entidadFiltro === 'PRODUCTO' && (
                     <div className="filter-group" style={{ gridColumn: '1 / -1' }}>
                         <div style={{ background: '#f7fafc', padding: '15px', borderRadius: '8px', border: '1px solid #edf2f7' }}>
@@ -249,8 +244,10 @@ export default function ReportePage() {
             </div>
 
             {/* --- RESULTADOS --- */}
-            {chartData && tablaData.length > 0 && (
-                <div style={{ marginTop: '30px' }}>
+            {/* CORRECCIÓN: Se quita la exigencia de chartData para mostrar la tabla */}
+            {tablaData.length > 0 && (
+                <div style={{ marginTop: '30px', animation: 'fadeIn 0.5s' }}>
+                    
                     <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:'20px' }}>
                         <button onClick={descargarPDF} className="btn-secondary" style={{ background:'#e53e3e', color:'white' }}>
                             <span>📄</span> Descargar PDF
@@ -258,25 +255,34 @@ export default function ReportePage() {
                     </div>
 
                     <div style={{ background: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                        <div id="report-header-section" style={{ background:'white' }}>
+                        
+                        <div id="report-header-section" style={{ background:'white', padding:'10px' }}>
                             <h3 style={{textAlign:'center', color:'#2d3748', textTransform: 'uppercase'}}>
                                 {tipoReporte === 'GASTOS' ? `INGRESO POR ${entidadFiltro}` : 
                                  tipoReporte === 'CONSUMO' ? `GUÍA DE CONSUMO POR ${entidadFiltro}` : 
                                  tipoReporte}
                             </h3>
-                            
-                            <div style={{ height: '350px', marginBottom: '40px' }}>
-                                {(tipoReporte === 'GASTOS' || tipoReporte === 'CONSUMO') && entidadFiltro !== 'PRODUCTO' ? (
-                                    <Pie data={chartData} options={{ responsive: true, maintainAspectRatio: false, plugins:{ legend:{ position:'right' } } }} />
-                                ) : chartData ? (
-                                    <Bar data={chartData} options={{ responsive: true, maintainAspectRatio: false }} />
+                            <p style={{textAlign:'center', color:'#718096', margin:'0 0 20px 0', fontSize:'0.9em'}}>
+                                Periodo: {fechaInicio} al {fechaFin}
+                            </p>
+
+                            <div style={{ height: chartData ? '350px' : 'auto', marginBottom: chartData ? '40px' : '0', position:'relative' }}>
+                                {/* Solo se renderiza el gráfico si chartData existe */}
+                                {chartData ? (
+                                    (tipoReporte === 'GASTOS' || tipoReporte === 'CONSUMO') && entidadFiltro !== 'PRODUCTO' ? (
+                                        <Pie data={chartData} options={{ responsive: true, maintainAspectRatio: false, plugins:{ legend:{ position:'right' } } }} />
+                                    ) : (
+                                        <Bar data={chartData} options={{ responsive: true, maintainAspectRatio: false, plugins:{ legend:{ position:'bottom' } } }} />
+                                    )
                                 ) : (
-                                    <p style={{textAlign:'center', padding:'50px', color:'#718096'}}>Vista por producto: gráfico no disponible.</p>
+                                    <div style={{ textAlign: 'center', padding: '20px', color: '#718096', fontStyle: 'italic', border: '1px dashed #e2e8f0', borderRadius: '8px' }}>
+                                        Gráfico no disponible para esta vista (Producto). Consulte la tabla de datos a continuación.
+                                    </div>
                                 )}
                             </div>
                         </div>
                         
-                        <div className="table-container">
+                        <div className="table-container" style={{ marginTop: '20px' }}>
                             <table className="responsive-table">
                                 <thead>
                                     <tr>
