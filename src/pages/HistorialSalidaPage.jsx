@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { getSalidas } from '../services/salidaService';
 import { useNavigate } from 'react-router-dom';
+import { getSalidas } from '../services/salidaService'; // Asegúrate que apunte a /api/salidas
 import * as XLSX from 'xlsx';
 
 export default function HistorialSalidaPage() {
@@ -12,8 +12,7 @@ export default function HistorialSalidaPage() {
     
     // Filtros
     const [busqueda, setBusqueda] = useState('');
-    const [fechaInicio, setFechaInicio] = useState('');
-    const [fechaFin, setFechaFin] = useState('');
+    const [fechaFiltro, setFechaFiltro] = useState(new Date().toISOString().split('T')[0]);
 
     // Modal Detalle
     const [mostrarModal, setMostrarModal] = useState(false);
@@ -22,228 +21,134 @@ export default function HistorialSalidaPage() {
     // --- CARGAR DATOS ---
     useEffect(() => {
         cargarDatos();
-    }, []);
+    }, [fechaFiltro]); // Recargar cuando cambie la fecha
 
     const cargarDatos = async () => {
+        setLoading(true);
         try {
+            // El backend retorna SalidaHistorial con valorNeto calculado por FIFO
             const dataFlat = await getSalidas(); 
             
-            // Debug: Ver qué llega del backend
-            console.log("Datos recibidos del backend:", dataFlat);
-
-            // Agrupación por Folio
             const grupos = {};
-            
             dataFlat.forEach(item => {
-                // Generar ID único para agrupación
-                const key = item.folio || `S/F-${item.fecha}-${item.id}`;
-
-                // Mapeo de campos (Backend Java -> Frontend React)
-                // El backend manda: 'origen', 'producto', 'sku', 'destino'
-                const itemOrigen = item.origen || item.areaOrigen || 'Desconocido';
-                const itemProducto = item.producto || item.productName;
-                const itemSku = item.sku || item.productSku;
-                const itemDestino = item.destino || item.areaDestino || 'Consumo Interno';
+                const key = item.folio || `S/F-${item.fecha}`;
 
                 if (!grupos[key]) {
                     grupos[key] = {
-                        folio: item.folio || 'S/F',
+                        folio: item.folio,
                         fecha: item.fecha,
-                        areaOrigen: itemOrigen, // Inicializamos con el origen del primer item
-                        esMultiOrigen: false,   // Bandera para saber si es mixta
+                        areaOrigen: item.areaOrigen,
                         responsable: item.usuarioResponsable || 'Sistema',
-                        cantidadItems: 0, 
+                        cantidadItems: 0,
                         totalUnidades: 0,
-                        tieneMermas: false,
+                        valorTotalGuia: 0, // Nuevo campo para reporte valorizado
                         detalles: []
                     };
                 }
 
-                // Lógica para detectar "GENERAL" (Varios orígenes en un mismo folio)
-                if (grupos[key].areaOrigen !== 'VARIOS' && grupos[key].areaOrigen !== itemOrigen) {
-                    grupos[key].areaOrigen = 'VARIOS / GENERAL'; // Marcamos visualmente
-                    grupos[key].esMultiOrigen = true;
-                }
-
                 grupos[key].cantidadItems += 1;
                 grupos[key].totalUnidades += item.cantidad;
-                if (item.tipoSalida === 'MERMA') grupos[key].tieneMermas = true;
-                
-                // Guardamos el detalle con los nombres normalizados
-                grupos[key].detalles.push({
-                    ...item,
-                    productName: itemProducto,
-                    productSku: itemSku,
-                    areaOrigen: itemOrigen,
-                    areaDestino: itemDestino
-                });
+                grupos[key].valorTotalGuia += (item.valorNeto || 0); // Sumamos el neto del backend
+                grupos[key].detalles.push(item);
             });
 
-            // Convertir objeto a array y ordenar por fecha descendente
-            const listaOrdenada = Object.values(grupos).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-            setHistorialAgrupado(listaOrdenada);
+            const lista = Object.values(grupos).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+            setHistorialAgrupado(lista);
 
         } catch (error) {
-            console.error("Error cargando historial salidas", error);
+            console.error("Error cargando historial", error);
         } finally {
             setLoading(false);
         }
     };
 
-    // --- FILTRADO ---
+    // --- FILTRADO POR FECHA Y TEXTO ---
     const datosFiltrados = historialAgrupado.filter(grupo => {
-        const texto = busqueda.toLowerCase();
+        const coincideFecha = grupo.fecha === fechaFiltro;
+        const coincideBusqueda = 
+            grupo.folio.toLowerCase().includes(busqueda.toLowerCase()) ||
+            grupo.responsable.toLowerCase().includes(busqueda.toLowerCase());
         
-        const matchEncabezado = 
-            (grupo.folio || '').toLowerCase().includes(texto) ||
-            (grupo.responsable || '').toLowerCase().includes(texto) ||
-            (grupo.areaOrigen || '').toLowerCase().includes(texto);
-
-        const matchDetalle = grupo.detalles.some(d => 
-            (d.productName || '').toLowerCase().includes(texto) ||
-            (d.productSku || '').toLowerCase().includes(texto)
-        );
-
-        let matchFecha = true;
-        if (fechaInicio) matchFecha = matchFecha && new Date(grupo.fecha) >= new Date(fechaInicio);
-        if (fechaFin) matchFecha = matchFecha && new Date(grupo.fecha) <= new Date(fechaFin);
-
-        return (matchEncabezado || matchDetalle) && matchFecha;
+        return coincideFecha && coincideBusqueda;
     });
-
-    const verDetalle = (grupo) => {
-        setGuiaSeleccionada(grupo);
-        setMostrarModal(true);
-    };
 
     const exportarExcel = () => {
         const listaPlana = datosFiltrados.flatMap(g => g.detalles);
         const ws = XLSX.utils.json_to_sheet(listaPlana.map(m => ({
             Fecha: m.fecha,
             Folio: m.folio,
-            Tipo: m.tipoSalida || 'CONSUMO',
-            SKU: m.productSku,
-            Producto: m.productName,
+            Producto: m.productoNombre,
             Cantidad: m.cantidad,
-            "Área Origen": m.areaOrigen,
-            "Área Destino": m.areaDestino,
+            Origen: m.areaOrigen,
+            Destino: m.areaDestino,
+            "Valor Neto ($)": m.valorNeto, // Reporte valorizado real
             Responsable: m.usuarioResponsable
         })));
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Salidas_Detalle");
-        XLSX.writeFile(wb, "Historial_Salidas.xlsx");
+        XLSX.utils.book_append_sheet(wb, ws, "Consumo_Día");
+        XLSX.writeFile(wb, `Reporte_Consumo_${fechaFiltro}.xlsx`);
     };
 
     return (
-        <div className="inventory-container">
-            {/* CABECERA */}
-            <div className="page-header">
-                <h2 className="page-title">📤 Historial de Salidas</h2>
-                <button onClick={() => navigate('/menu')} className="back-btn">⬅ Volver</button>
+        <div style={{padding: '30px', backgroundColor: '#f4f7f6', minHeight: '100vh', fontFamily: 'sans-serif'}}>
+            
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px'}}>
+                <div>
+                    <h2 style={{margin: 0, color: '#2d3748', fontSize: '1.7rem', fontWeight: 'bold'}}>HISTORIAL DE CONSUMO</h2>
+                    <p style={{margin: 0, color: '#718096'}}>Consulta y valorización de salidas de stock</p>
+                </div>
+                <button onClick={() => navigate('/menu')} style={{padding: '10px 20px', borderRadius: '8px', border: '1px solid #cbd5e0', cursor: 'pointer'}}>⬅ Volver</button>
             </div>
 
-            {/* FILTROS RESPONSIVOS */}
-            <div className="filters-panel">
-                <div className="filter-group" style={{ flex: 2 }}>
-                    <label className="filter-label">🔍 Buscar (Guía, Prod, Resp)</label>
-                    <input 
-                        type="text" 
-                        placeholder="Ej: GC-123, Coca Cola..." 
-                        value={busqueda}
-                        onChange={e => setBusqueda(e.target.value)}
-                        className="filter-input"
-                    />
+            {/* PANEL DE CONTROL / FILTROS */}
+            <div style={{backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', marginBottom: '25px', display: 'flex', gap: '20px', alignItems: 'flex-end'}}>
+                <div style={{flex: 1}}>
+                    <label style={{display: 'block', fontWeight: 'bold', marginBottom: '8px', fontSize: '0.85rem'}}>1. SELECCIONAR FECHA</label>
+                    <input type="date" value={fechaFiltro} onChange={e => setFechaFiltro(e.target.value)} style={{width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0'}} />
                 </div>
-                <div className="filter-group">
-                    <label className="filter-label">Desde</label>
-                    <input 
-                        type="date" 
-                        value={fechaInicio} 
-                        onChange={e => setFechaInicio(e.target.value)} 
-                        className="filter-input"
-                    />
+                <div style={{flex: 2}}>
+                    <label style={{display: 'block', fontWeight: 'bold', marginBottom: '8px', fontSize: '0.85rem'}}>2. BUSCAR POR FOLIO O RESPONSABLE</label>
+                    <input type="text" placeholder="Ej: GC-1734..." value={busqueda} onChange={e => setBusqueda(e.target.value)} style={{width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0'}} />
                 </div>
-                <div className="filter-group">
-                    <label className="filter-label">Hasta</label>
-                    <input 
-                        type="date" 
-                        value={fechaFin} 
-                        onChange={e => setFechaFin(e.target.value)} 
-                        className="filter-input"
-                    />
-                </div>
-                
-                <div className="filter-group" style={{ justifyContent: 'flex-end' }}>
-                    <button 
-                        onClick={exportarExcel} 
-                        disabled={datosFiltrados.length === 0}
-                        className="btn-primary"
-                        style={{ height: '42px', padding: '0 20px', backgroundColor: '#28a745' }}
-                    >
-                        📊 Excel
-                    </button>
-                </div>
+                <button onClick={exportarExcel} style={{backgroundColor: '#38a169', color: 'white', padding: '12px 25px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer'}}>
+                    📊 Exportar Día
+                </button>
             </div>
 
-            {/* TABLA PRINCIPAL (RESUMEN) */}
-            <div className="table-container">
-                <table className="responsive-table">
-                    <thead>
-                        <tr>
-                            <th>Fecha</th>
-                            <th>Folio Guía</th>
-                            <th>Origen</th>
-                            <th>Responsable</th>
-                            <th style={{textAlign: 'center'}}>Items</th>
-                            <th style={{textAlign: 'center'}}>Total Unid.</th>
-                            <th style={{textAlign: 'center'}}>Estado</th>
-                            <th style={{textAlign: 'center'}}>Acción</th>
+            {/* TABLA DE RESUMEN */}
+            <div style={{backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', overflow: 'hidden'}}>
+                <table style={{width: '100%', borderCollapse: 'collapse'}}>
+                    <thead style={{backgroundColor: '#f8fafc', borderBottom: '2px solid #edf2f7'}}>
+                        <tr style={{textAlign: 'left', color: '#718096', fontSize: '0.75rem', textTransform: 'uppercase'}}>
+                            <th style={{padding: '15px'}}>Folio Guía</th>
+                            <th style={{padding: '15px'}}>Responsable</th>
+                            <th style={{padding: '15px'}}>Origen</th>
+                            <th style={{padding: '15px', textAlign: 'center'}}>Items</th>
+                            <th style={{padding: '15px', textAlign: 'right'}}>Valor Total</th>
+                            <th style={{padding: '15px', textAlign: 'center'}}>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan="8" style={{ padding: '20px', textAlign: 'center' }}>Cargando...</td></tr>
+                            <tr><td colSpan="6" style={{padding: '40px', textAlign: 'center'}}>Cargando historial...</td></tr>
                         ) : datosFiltrados.length === 0 ? (
-                            <tr><td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: '#888' }}>No se encontraron guías.</td></tr>
+                            <tr><td colSpan="6" style={{padding: '40px', textAlign: 'center', color: '#a0aec0'}}>No hay guías para la fecha seleccionada.</td></tr>
                         ) : (
                             datosFiltrados.map((g, i) => (
-                                <tr key={i}>
-                                    <td data-label="Fecha">{g.fecha}</td>
-                                    <td data-label="Folio" style={{ fontWeight: 'bold' }}>{g.folio}</td>
-                                    <td data-label="Origen">
-                                        {/* Si es multi-origen, lo mostramos en azulito o negrita */}
-                                        {g.esMultiOrigen ? (
-                                            <span style={{ color: '#2b6cb0', fontWeight: 'bold' }}>🏢 VARIOS / GENERAL</span>
-                                        ) : (
-                                            g.areaOrigen
-                                        )}
+                                <tr key={i} style={{borderBottom: '1px solid #f1f5f9'}}>
+                                    <td style={{padding: '15px', fontWeight: 'bold', color: '#3182ce'}}>{g.folio}</td>
+                                    <td style={{padding: '15px'}}>{g.responsable}</td>
+                                    <td style={{padding: '15px'}}>
+                                        <span style={{padding: '4px 8px', backgroundColor: '#ebf8ff', color: '#2b6cb0', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold'}}>
+                                            {g.areaOrigen}
+                                        </span>
                                     </td>
-                                    <td data-label="Responsable">
-                                        <span className="badge-category">{g.responsable}</span>
+                                    <td style={{padding: '15px', textAlign: 'center'}}>{g.cantidadItems}</td>
+                                    <td style={{padding: '15px', textAlign: 'right', fontWeight: 'bold', color: '#2d3748'}}>
+                                        ${g.valorTotalGuia.toLocaleString('es-CL')}
                                     </td>
-                                    <td data-label="Items" style={{ textAlign:'center' }}>{g.cantidadItems}</td>
-                                    <td data-label="Total Unid." style={{ textAlign:'center', fontWeight:'bold' }}>{g.totalUnidades}</td>
-                                    
-                                    <td data-label="Estado" style={{ textAlign:'center' }}>
-                                        {g.tieneMermas ? (
-                                            <span style={{background:'#fff3cd', color:'#c05621', padding:'3px 8px', borderRadius:'6px', fontSize:'0.85em', fontWeight:'bold', border:'1px solid #fbd38d'}}>
-                                                ⚠️ Mermas
-                                            </span>
-                                        ) : (
-                                            <span style={{color:'#2f855a', fontWeight:'bold', fontSize:'0.9em'}}>
-                                                ✅ OK
-                                            </span>
-                                        )}
-                                    </td>
-                                    
-                                    <td data-label="Acción" style={{ textAlign:'center' }}>
-                                        <button 
-                                            onClick={() => verDetalle(g)}
-                                            className="btn-primary"
-                                            style={{ padding: '6px 12px', fontSize: '0.9em', margin: '0 auto' }}
-                                        >
-                                            Ver
-                                        </button>
+                                    <td style={{padding: '15px', textAlign: 'center'}}>
+                                        <button onClick={() => { setGuiaSeleccionada(g); setMostrarModal(true); }} style={{background: '#edf2f7', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold'}}>Ver Detalle</button>
                                     </td>
                                 </tr>
                             ))
@@ -252,67 +157,38 @@ export default function HistorialSalidaPage() {
                 </table>
             </div>
 
-            {/* MODAL DETALLE */}
+            {/* MODAL DE DETALLES (Se mantiene igual pero con el estilo limpio) */}
             {mostrarModal && guiaSeleccionada && (
-                <div className="modal-overlay">
-                    <div className="modal-content" style={{ maxWidth: '900px', padding: 0 }}>
-                        
-                        {/* HEADER MODAL */}
-                        <div style={{ padding: '20px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f7fafc', borderRadius: '12px 12px 0 0' }}>
-                            <div>
-                                <h3 style={{ margin: 0, color:'#2d3748' }}>📋 Guía: {guiaSeleccionada.folio}</h3>
-                                <p style={{ margin: 0, color:'#718096', fontSize:'0.9em' }}>
-                                    {guiaSeleccionada.fecha} - Resp: {guiaSeleccionada.responsable}
-                                </p>
-                            </div>
-                            <button onClick={() => setMostrarModal(false)} style={{ background: 'none', border: 'none', fontSize: '2em', cursor: 'pointer', color:'#a0aec0' }}>&times;</button>
+                <div style={{position: 'fixed', top:0, left:0, width:'100%', height:'100%', backgroundColor:'rgba(0,0,0,0.5)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:1000}}>
+                    <div style={{backgroundColor:'white', width:'90%', maxWidth:'800px', borderRadius:'12px', overflow:'hidden', boxShadow:'0 20px 25px rgba(0,0,0,0.15)'}}>
+                        <div style={{padding:'20px', borderBottom:'1px solid #edf2f7', display:'flex', justifyContent:'space-between', alignItems:'center', backgroundColor: '#f8fafc'}}>
+                            <h3 style={{margin:0}}>DETALLE GUÍA: {guiaSeleccionada.folio}</h3>
+                            <button onClick={() => setMostrarModal(false)} style={{background:'none', border:'none', fontSize:'1.5rem', cursor:'pointer'}}>×</button>
                         </div>
-
-                        {/* BODY SCROLLABLE */}
-                        <div style={{ padding: '20px', overflowY: 'auto', maxHeight: '70vh' }}>
-                            <table className="responsive-table">
+                        <div style={{padding:'20px', maxHeight:'60vh', overflowY:'auto'}}>
+                            <table style={{width:'100%', borderCollapse:'collapse'}}>
                                 <thead>
-                                    <tr>
-                                        <th>Tipo</th>
-                                        <th>Producto</th>
-                                        <th>SKU</th>
-                                        {/* AÑADIDO: Columna Origen para ver de dónde salió cada item */}
-                                        <th>Origen</th> 
-                                        <th>Destino</th>
-                                        <th style={{textAlign:'right'}}>Cantidad</th>
+                                    <tr style={{textAlign:'left', borderBottom:'2px solid #edf2f7', color:'#718096', fontSize:'0.75rem'}}>
+                                        <th style={{padding:'10px'}}>PRODUCTO</th>
+                                        <th style={{padding:'10px'}}>DESTINO</th>
+                                        <th style={{padding:'10px', textAlign:'right'}}>CANTIDAD</th>
+                                        <th style={{padding:'10px', textAlign:'right'}}>NETO LÍNEA</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {guiaSeleccionada.detalles.map((d, i) => (
-                                        <tr key={i} style={{ background: d.tipoSalida === 'MERMA' ? '#fff5f5' : 'transparent' }}>
-                                            <td data-label="Tipo">
-                                                {d.tipoSalida === 'MERMA' ? (
-                                                    <span style={{color:'#e53e3e', fontWeight:'bold'}}>🗑️ MERMA</span>
-                                                ) : d.tipoSalida === 'VENTA' ? (
-                                                    <span style={{color:'#0dcaf0', fontWeight:'bold'}}>💰 VENTA</span>
-                                                ) : (
-                                                    <span style={{color:'#38a169', fontWeight:'bold'}}>✅ CONSUMO</span>
-                                                )}
-                                            </td>
-                                            <td data-label="Producto"><strong>{d.productName}</strong></td>
-                                            <td data-label="SKU" style={{ color:'#718096', fontSize:'0.9em' }}>{d.productSku}</td>
-                                            
-                                            {/* DATOS DE ORIGEN Y DESTINO */}
-                                            <td data-label="Origen" style={{ fontSize:'0.9em', color:'#4a5568' }}>{d.areaOrigen}</td>
-                                            <td data-label="Destino" style={{ fontSize:'0.9em', color:'#4a5568' }}>{d.areaDestino}</td>
-                                            
-                                            <td data-label="Cantidad" style={{ textAlign: 'right', fontWeight:'bold' }}>{d.cantidad}</td>
+                                        <tr key={i} style={{borderBottom:'1px solid #f7fafc'}}>
+                                            <td style={{padding:'12px'}}><strong>{d.productoNombre}</strong><br/><small style={{color:'#a0aec0'}}>SKU: {d.sku}</small></td>
+                                            <td style={{padding:'12px'}}>{d.areaDestino}</td>
+                                            <td style={{padding:'12px', textAlign:'right', fontWeight:'bold'}}>{d.cantidad}</td>
+                                            <td style={{padding:'12px', textAlign:'right'}}>${d.valorNeto?.toLocaleString('es-CL')}</td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                         </div>
-
-                        {/* FOOTER MODAL */}
-                        <div style={{ padding: '15px 20px', borderTop: '1px solid #e2e8f0', textAlign: 'right', background: '#f7fafc', borderRadius: '0 0 12px 12px' }}>
-                            <button onClick={() => setMostrarModal(false)} className="btn-secondary">
-                                Cerrar
-                            </button>
+                        <div style={{padding:'20px', textAlign:'right', backgroundColor:'#f8fafc'}}>
+                            <button onClick={() => setMostrarModal(false)} style={{padding:'10px 20px', borderRadius:'8px', border:'1px solid #cbd5e0', cursor:'pointer'}}>Cerrar</button>
                         </div>
                     </div>
                 </div>
