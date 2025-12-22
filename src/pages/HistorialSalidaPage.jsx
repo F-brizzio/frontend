@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getSalidas, getDetalleSalida } from '../services/historialSalidaService'; 
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+// CORRECCIÓN: Importación explícita de autoTable para que la función sea reconocida
+import autoTable from 'jspdf-autotable'; 
 
 const formatCurrency = (amount) => {
     return new Intl.NumberFormat('es-CL', { 
@@ -48,44 +49,51 @@ export default function HistorialSalidaPage() {
     };
 
     const exportarAPDF = () => {
-        const doc = new jsPDF();
-        doc.setFontSize(18);
-        doc.text("GUÍA DE CONSUMO INTERNO", 14, 22);
-        
-        doc.setFontSize(10);
-        doc.setTextColor(100);
-        doc.text(`Folio: ${guiaSeleccionada.folio}`, 14, 32);
-        doc.text(`Fecha: ${guiaSeleccionada.fecha}`, 14, 38);
-        doc.text(`Responsable: ${guiaSeleccionada.responsable}`, 14, 44);
-        doc.text(`Bodega Origen: ${guiaSeleccionada.areaOrigen}`, 14, 50);
+        try {
+            const doc = new jsPDF();
+            doc.setFontSize(18);
+            doc.text("GUÍA DE CONSUMO INTERNO", 14, 22);
+            
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Folio: ${guiaSeleccionada.folio}`, 14, 32);
+            doc.text(`Fecha: ${guiaSeleccionada.fecha}`, 14, 38);
+            doc.text(`Responsable: ${guiaSeleccionada.responsable}`, 14, 44);
+            doc.text(`Bodega Origen: ${guiaSeleccionada.areaOrigen}`, 14, 50);
 
-        const tableColumn = ["Producto", "Destino", "Tipo", "Cant.", "Valor Neto"];
-        const tableRows = itemsDetalle.map(item => [
-            item.productName,
-            item.areaDestino,
-            item.tipoSalida,
-            item.cantidad,
-            formatCurrency(item.valorNeto)
-        ]);
+            const tableColumn = ["Producto", "Destino", "Tipo", "Cant.", "Valor Neto"];
+            const tableRows = itemsDetalle.map(item => [
+                item.productName,
+                item.areaDestino,
+                item.tipoSalida,
+                item.cantidad,
+                formatCurrency(item.valorNeto)
+            ]);
 
-        doc.autoTable({
-            head: [tableColumn],
-            body: tableRows,
-            startY: 58,
-            theme: 'grid',
-            headStyles: { fillColor: [45, 55, 72] },
-            styles: { fontSize: 8 }
-        });
+            // CORRECCIÓN: Uso de la función autoTable importada directamente
+            autoTable(doc, {
+                head: [tableColumn],
+                body: tableRows,
+                startY: 58,
+                theme: 'grid',
+                headStyles: { fillColor: [45, 55, 72] },
+                styles: { fontSize: 8 }
+            });
 
-        const finalY = doc.lastAutoTable.finalY + 10;
-        doc.setFontSize(12);
-        doc.setTextColor(0);
-        doc.text(`VALOR TOTAL NETO: ${formatCurrency(guiaSeleccionada.totalNeto)}`, 130, finalY);
+            // doc.lastAutoTable sigue estando disponible para calcular la posición final
+            const finalY = doc.lastAutoTable.finalY + 10;
+            doc.setFontSize(12);
+            doc.setTextColor(0);
+            doc.text(`VALOR TOTAL NETO: ${formatCurrency(guiaSeleccionada.totalNeto)}`, 130, finalY);
 
-        doc.save(`Guia_${guiaSeleccionada.folio}.pdf`);
+            doc.save(`Guia_${guiaSeleccionada.folio}.pdf`);
+        } catch (error) {
+            console.error("Error al exportar PDF:", error);
+            alert("No se pudo generar el PDF. Verifica la consola.");
+        }
     };
 
-    // Lógica de filtrado: si la fecha está vacía (borrada), muestra todo
+    // Lógica de filtrado
     const datosFiltrados = historialResumen.filter(g => 
         !fechaFiltro || g.fecha === fechaFiltro
     );
@@ -93,55 +101,57 @@ export default function HistorialSalidaPage() {
     return (
         <div className="inventory-container" style={{padding: '20px', backgroundColor: '#f4f7f6', minHeight: '100vh'}}>
             {/* Header */}
-            <div className="page-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px'}}>
+            <div className="page-header">
                 <div>
                     <h2 style={{margin: 0, color: '#2d3748'}}>📜 Historial de Salidas</h2>
                     <p style={{margin: 0, color: '#718096', fontSize: '0.9rem'}}>Gestión y descarga de guías de consumo</p>
                 </div>
-                <button onClick={() => navigate('/menu')} style={{padding: '10px 20px', cursor:'pointer', borderRadius:'6px', border:'1px solid #cbd5e0', background:'white'}}>⬅ Volver</button>
+                <button onClick={() => navigate('/menu')} className="back-btn">⬅ Volver</button>
             </div>
 
-            {/* Filtro de Fecha Simplificado */}
-            <div className="filters-panel" style={{background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '15px'}}>
+            {/* Filtro de Fecha */}
+            <div className="filters-panel">
                 <label style={{fontWeight: 'bold', color: '#4a5568'}}>Seleccionar Fecha:</label>
                 <input 
                     type="date" 
                     value={fechaFiltro} 
                     onChange={e => setFechaFiltro(e.target.value)}
-                    style={{padding: '8px 15px', borderRadius: '5px', border: '1px solid #e2e8f0', fontSize: '1rem', color: '#2d3748'}}
+                    className="filter-input"
+                    style={{ width: 'auto' }}
                 />
             </div>
 
             {/* Tabla Principal */}
-            <div className="table-container" style={{background: 'white', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', overflow: 'hidden'}}>
-                <table style={{width: '100%', borderCollapse: 'collapse'}}>
-                    <thead style={{backgroundColor: '#f7fafc', borderBottom: '2px solid #e2e8f0'}}>
-                        <tr style={{color: '#718096', textTransform: 'uppercase', fontSize: '0.75rem'}}>
-                            <th style={{padding: '15px', textAlign: 'left'}}>Fecha</th>
-                            <th style={{padding: '15px', textAlign: 'left'}}>Responsable</th>
-                            <th style={{padding: '15px', textAlign: 'left'}}>Destino</th>
-                            <th style={{padding: '15px', textAlign: 'right'}}>Total Neto</th>
-                            <th style={{padding: '15px', textAlign: 'center'}}>Acciones</th>
+            <div className="table-container">
+                <table className="responsive-table">
+                    <thead>
+                        <tr>
+                            <th style={{textAlign: 'left'}}>Fecha</th>
+                            <th style={{textAlign: 'left'}}>Responsable</th>
+                            <th style={{textAlign: 'left'}}>Destino</th>
+                            <th style={{textAlign: 'right'}}>Total Neto</th>
+                            <th style={{textAlign: 'center'}}>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan="5" style={{padding: '30px', textAlign: 'center'}}>Cargando registros...</td></tr>
+                            <tr><td colSpan="5" style={{textAlign: 'center', padding: '20px'}}>Cargando registros...</td></tr>
                         ) : datosFiltrados.length === 0 ? (
-                            <tr><td colSpan="5" style={{padding: '30px', textAlign: 'center', color: '#a0aec0'}}>No hay guías para la fecha seleccionada.</td></tr>
+                            <tr><td colSpan="5" style={{textAlign: 'center', padding: '20px', color: '#a0aec0'}}>No hay guías para la fecha seleccionada.</td></tr>
                         ) : (
                             datosFiltrados.map((g, i) => (
-                                <tr key={i} style={{borderBottom: '1px solid #edf2f7'}}>
-                                    <td style={{padding: '15px'}}>{g.fecha}</td>
-                                    <td style={{padding: '15px', fontWeight: 'bold'}}>{g.responsable}</td>
-                                    <td style={{padding: '15px'}}>{g.destino}</td>
-                                    <td style={{padding: '15px', textAlign: 'right', fontWeight: 'bold', color: '#2f855a'}}>
+                                <tr key={i}>
+                                    <td>{g.fecha}</td>
+                                    <td><strong>{g.responsable}</strong></td>
+                                    <td>{g.destino}</td>
+                                    <td style={{textAlign: 'right', fontWeight: 'bold', color: '#2f855a'}}>
                                         {formatCurrency(g.totalNeto)}
                                     </td>
-                                    <td style={{padding: '15px', textAlign: 'center'}}>
+                                    <td style={{textAlign: 'center'}}>
                                         <button 
                                             onClick={() => abrirModalDetalle(g)} 
-                                            style={{padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', border: '1px solid #3182ce', color: '#3182ce', background: 'white'}}
+                                            className="btn-secondary"
+                                            style={{ color: '#3182ce', borderColor: '#3182ce' }}
                                         >
                                             📄 Ver Detalle
                                         </button>
@@ -155,52 +165,53 @@ export default function HistorialSalidaPage() {
 
             {/* Modal Detalle */}
             {mostrarModal && guiaSeleccionada && (
-                <div style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000}}>
-                    <div style={{backgroundColor: 'white', borderRadius: '8px', width: '95%', maxWidth: '1000px', maxHeight: '90vh', overflowY: 'auto'}}>
-                        
-                        <div style={{padding: '20px 30px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                <div className="modal-overlay" style={{ display: 'flex', zIndex: 1000 }}>
+                    <div className="modal-content" style={{ maxWidth: '1000px', width: '95%' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
                             <div>
-                                <h3 style={{margin: 0, color: '#2d3748'}}>DETALLE GUÍA {guiaSeleccionada.folio}</h3>
-                                <p style={{margin: 0, fontSize: '0.85rem', color: '#718096'}}>Responsable: {guiaSeleccionada.responsable}</p>
+                                <h3 style={{margin: 0}}>DETALLE GUÍA {guiaSeleccionada.folio}</h3>
+                                <p style={{margin: 0, color: '#718096'}}>Responsable: {guiaSeleccionada.responsable}</p>
                             </div>
                             <button 
                                 onClick={exportarAPDF}
-                                style={{padding: '10px 20px', backgroundColor: '#e53e3e', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold'}}
+                                className="btn-primary"
+                                style={{ backgroundColor: '#e53e3e' }}
                             >
                                 📥 Descargar PDF
                             </button>
                         </div>
 
-                        <div style={{padding: '25px'}}>
-                            <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem'}}>
+                        <div className="table-container" style={{ boxShadow: 'none' }}>
+                            <table className="responsive-table">
                                 <thead>
-                                    <tr style={{borderBottom: '2px solid #edf2f7', color: '#718096', textTransform: 'uppercase', fontSize: '0.75rem'}}>
-                                        <th style={{textAlign: 'left', padding: '10px'}}>PRODUCTO</th>
-                                        <th style={{textAlign: 'left', padding: '10px'}}>DESTINO</th>
-                                        <th style={{textAlign: 'left', padding: '10px'}}>TIPO</th>
-                                        <th style={{textAlign: 'center', padding: '10px'}}>CANT.</th>
-                                        <th style={{textAlign: 'right', padding: '10px'}}>V. NETO</th>
+                                    <tr>
+                                        <th>PRODUCTO</th>
+                                        <th>DESTINO</th>
+                                        <th>TIPO</th>
+                                        <th style={{textAlign: 'center'}}>CANT.</th>
+                                        <th style={{textAlign: 'right'}}>V. NETO</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {itemsDetalle.map((d, idx) => (
-                                        <tr key={idx} style={{borderBottom: '1px solid #edf2f7'}}>
-                                            <td style={{padding: '12px 10px'}}><strong>{d.productName}</strong></td>
-                                            <td style={{padding: '12px 10px'}}>{d.areaDestino}</td>
-                                            <td style={{padding: '12px 10px'}}>{d.tipoSalida}</td>
-                                            <td style={{padding: '12px 10px', textAlign: 'center'}}>{d.cantidad}</td>
-                                            <td style={{padding: '12px 10px', textAlign: 'right'}}>{formatCurrency(d.valorNeto)}</td>
+                                        <tr key={idx}>
+                                            <td><strong>{d.productName}</strong></td>
+                                            <td>{d.areaDestino}</td>
+                                            <td>{d.tipoSalida}</td>
+                                            <td style={{textAlign: 'center'}}>{d.cantidad}</td>
+                                            <td style={{textAlign: 'right'}}>{formatCurrency(d.valorNeto)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
-                            <div style={{marginTop: '20px', textAlign: 'right', borderTop: '2px solid #cbd5e0', paddingTop: '10px'}}>
-                                <span style={{fontSize: '1.2rem', fontWeight: 'bold', color: '#2d3748'}}>SUMA TOTAL NETO: {formatCurrency(guiaSeleccionada.totalNeto)}</span>
-                            </div>
+                        </div>
+                        
+                        <div style={{marginTop: '20px', textAlign: 'right', fontWeight: 'bold', fontSize: '1.1rem'}}>
+                            SUMA TOTAL NETO: {formatCurrency(guiaSeleccionada.totalNeto)}
                         </div>
 
-                        <div style={{padding: '15px', textAlign: 'center', borderTop: '1px solid #e2e8f0'}}>
-                            <button onClick={() => setMostrarModal(false)} style={{padding: '8px 25px', backgroundColor: '#718096', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>Cerrar</button>
+                        <div className="form-actions" style={{ marginTop: '20px' }}>
+                            <button className="btn-secondary" onClick={() => setMostrarModal(false)}>Cerrar</button>
                         </div>
                     </div>
                 </div>
