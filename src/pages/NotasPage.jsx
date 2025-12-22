@@ -144,7 +144,7 @@ export default function NotasPage() {
             {/* CABECERA - Cambiada a Gestión de Ventas */}
             <div className="page-header">
                 <div>
-                    <h2 className="page-title">💰 Ventas</h2>
+                    <h2 className="page-title">💰 Ventas</h2>        
                     <p style={{ margin: 0, color: '#718096', fontSize: '0.9em' }}>
                         Usuario Activo: <strong>{user?.fullName || user?.username}</strong>
                     </p>

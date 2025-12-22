@@ -1,25 +1,20 @@
 import { useState, useEffect } from 'react';
-import { getInventarioCompleto, ajustarStock } from '../services/inventoryService';
+import { getInventory } from '../services/inventoryService';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+// Importar librerías para PDF
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 export default function InventarioPage() {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [inventario, setInventario] = useState([]);
     const [loading, setLoading] = useState(true);
-    
-    // Filtros y Selección
     const [busqueda, setBusqueda] = useState('');
-    const [filtroArea, setFiltroArea] = useState('');
-    const [listaAreas, setListaAreas] = useState([]);
-    const [seleccionados, setSeleccionados] = useState({});
 
-    // Estado del Modal de Ajuste
-    const [showModal, setShowModal] = useState(false);
-    const [itemAjuste, setItemAjuste] = useState(null);
-    const [nuevaCantidad, setNuevaCantidad] = useState('');
-    const [motivoAjuste, setMotivoAjuste] = useState('');
+    // --- NUEVO: Estado para Selección ---
+    const [seleccionados, setSeleccionados] = useState([]);
 
     useEffect(() => {
         cargarInventario();
@@ -27,146 +22,126 @@ export default function InventarioPage() {
 
     const cargarInventario = async () => {
         try {
-            const data = await getInventarioCompleto();
+            const data = await getInventory();
             setInventario(data);
-            setListaAreas([...new Set(data.map(item => item.areaNombre))].sort());
         } catch (error) {
-            console.error("Error:", error);
-        } finally { setLoading(false); }
-    };
-
-    // Lógica de Modal
-    const abrirModalAjuste = (item) => {
-        setItemAjuste(item);
-        setNuevaCantidad(item.cantidadTotal);
-        setMotivoAjuste('Corrección por inventario físico');
-        setShowModal(true);
-    };
-
-    const ejecutarAjuste = async () => {
-        if (!nuevaCantidad || nuevaCantidad < 0) return alert("Cantidad no válida");
-        try {
-            await ajustarStock({
-                productSku: itemAjuste.productSku,
-                areaId: itemAjuste.areaId,
-                nuevaCantidad: parseFloat(nuevaCantidad),
-                motivo: motivoAjuste
-            });
-            alert("✅ Stock actualizado correctamente");
-            setShowModal(false);
-            cargarInventario();
-        } catch (error) {
-            alert(error.message);
+            console.error(error);
+        } finally {
+            setLoading(false);
         }
     };
 
-    const datosFiltrados = inventario.filter(item => {
-        const matchText = item.productName?.toLowerCase().includes(busqueda.toLowerCase()) || 
-                         item.productSku?.toLowerCase().includes(busqueda.toLowerCase());
-        const matchArea = !filtroArea || item.areaNombre === filtroArea;
-        return matchText && matchArea;
-    });
+    // --- LÓGICA DE SELECCIÓN ---
+    const toggleSeleccionarTodo = () => {
+        if (seleccionados.length === inventarioFiltrado.length) {
+            setSeleccionados([]);
+        } else {
+            setSeleccionados(inventarioFiltrado.map(item => item.id));
+        }
+    };
+
+    const toggleSeleccion = (id) => {
+        setSeleccionados(prev => 
+            prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+        );
+    };
+
+    // --- GENERAR PDF ---
+    const generarPDF = () => {
+        const doc = new jsPDF();
+        const productosPDF = inventario.filter(p => seleccionados.includes(p.id));
+        
+        doc.text("Lista de Productos Seleccionados", 14, 15);
+        doc.setFontSize(10);
+        doc.text(`Generado por: ${user?.fullName || user?.username} - ${new Date().toLocaleDateString()}`, 14, 22);
+
+        const tableColumn = ["Producto", "Categoría", "Stock Actual", "Precio"];
+        const tableRows = productosPDF.map(p => [
+            p.name, 
+            p.category, 
+            p.stock, 
+            `$${p.price?.toLocaleString() || '0'}`
+        ]);
+
+        autoTable(doc, {
+            head: [tableColumn],
+            body: tableRows,
+            startY: 30,
+        });
+
+        doc.save(`inventario_seleccionado_${new Date().getTime()}.pdf`);
+    };
+
+    const inventarioFiltrado = inventario.filter(item => 
+        item.name.toLowerCase().includes(busqueda.toLowerCase())
+    );
 
     return (
         <div className="inventory-container">
             <div className="page-header">
-                <h2 className="page-title">📦 Control de Inventario</h2>
-                <button onClick={() => navigate('/menu')} className="back-btn">Volver</button>
+                <h2 className="page-title">📦 Inventario de Productos</h2>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    {/* Botón para generar PDF */}
+                    <button 
+                        onClick={generarPDF} 
+                        disabled={seleccionados.length === 0}
+                        className="btn-primary"
+                        style={{ background: seleccionados.length > 0 ? '#e53e3e' : '#cbd5e0' }}
+                    >
+                        📄 Exportar PDF ({seleccionados.length})
+                    </button>
+                    <button onClick={() => navigate('/menu')} className="back-btn">⬅ Menú</button>
+                </div>
             </div>
 
-            {/* Panel de Filtros */}
             <div className="filters-panel">
-                <div className="filter-group" style={{ gridColumn: 'span 2' }}>
-                    <input 
-                        className="filter-input"
-                        placeholder="Buscar por nombre o SKU..."
-                        value={busqueda}
-                        onChange={(e) => setBusqueda(e.target.value)}
-                    />
-                </div>
-                <div className="filter-group">
-                    <select className="filter-select" onChange={(e) => setFiltroArea(e.target.value)}>
-                        <option value="">Todas las Áreas</option>
-                        {listaAreas.map(a => <option key={a} value={a}>{a}</option>)}
-                    </select>
-                </div>
+                <input 
+                    type="text" 
+                    placeholder="Buscar producto..." 
+                    value={busqueda} 
+                    onChange={e => setBusqueda(e.target.value)}
+                    className="filter-input"
+                />
             </div>
 
             <div className="table-container">
-                <table className="responsive-table">
+                <table className="inventory-table">
                     <thead>
                         <tr>
-                            <th>Producto / SKU</th>
-                            <th>Ubicación</th>
-                            <th style={{ textAlign: 'right' }}>Stock</th>
-                            <th style={{ textAlign: 'center' }}>Acciones</th>
+                            <th>
+                                {/* OPCIÓN SELECCIONAR TODO */}
+                                <input 
+                                    type="checkbox" 
+                                    onChange={toggleSeleccionarTodo}
+                                    checked={seleccionados.length === inventarioFiltrado.length && inventarioFiltrado.length > 0}
+                                />
+                            </th>
+                            <th>Producto</th>
+                            <th>Stock</th>
+                            <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {datosFiltrados.map((item) => {
-                            const isLow = item.cantidadTotal <= 5;
-                            return (
-                                <tr key={`${item.productSku}-${item.areaNombre}`}>
-                                    <td data-label="Producto">
-                                        <strong>{item.productName}</strong>
-                                        <div style={{ fontSize: '0.75rem', color: '#718096' }}>{item.productSku}</div>
-                                    </td>
-                                    <td data-label="Área">
-                                        <span className="badge-category">{item.areaNombre}</span>
-                                    </td>
-                                    <td data-label="Stock" style={{ textAlign: 'right' }}>
-                                        <span style={{ color: isLow ? '#e53e3e' : '#2f855a', fontWeight: 'bold' }}>
-                                            {item.cantidadTotal} {item.unidadMedida}
-                                        </span>
-                                        {isLow && <div style={{ fontSize: '0.65rem', color: '#e53e3e' }}>¡STOCK BAJO!</div>}
-                                    </td>
-                                    <td data-label="Acciones" style={{ textAlign: 'center' }}>
-                                        <button className="btn-secondary" onClick={() => abrirModalAjuste(item)}>
-                                            🔧 Ajustar
-                                        </button>
-                                    </td>
-                                </tr>
-                            );
-                        })}
+                        {inventarioFiltrado.map(item => (
+                            <tr key={item.id}>
+                                <td>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={seleccionados.includes(item.id)}
+                                        onChange={() => toggleSeleccion(item.id)}
+                                    />
+                                </td>
+                                <td>{item.name}</td>
+                                <td>{item.stock} {item.unit}</td>
+                                <td>
+                                    {/* SE ELIMINÓ LA OPCIÓN DE AJUSTAR */}
+                                    <button className="btn-secondary" onClick={() => navigate(`/product/${item.id}`)}>Ver</button>
+                                </td>
+                            </tr>
+                        ))}
                     </tbody>
                 </table>
             </div>
-
-            {/* Modal de Ajuste */}
-            {showModal && (
-                <div className="modal-overlay">
-                    <div className="modal-content">
-                        <h3>Ajuste Manual: {itemAjuste?.productName}</h3>
-                        <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '1rem' }}>
-                            Ubicación: {itemAjuste?.areaNombre}
-                        </p>
-                        
-                        <div className="form-group">
-                            <label className="form-label">Nueva Cantidad Física</label>
-                            <input 
-                                type="number" 
-                                className="form-input"
-                                value={nuevaCantidad}
-                                onChange={(e) => setNuevaCantidad(e.target.value)}
-                            />
-                        </div>
-
-                        <div className="form-group" style={{ marginTop: '1rem' }}>
-                            <label className="form-label">Motivo</label>
-                            <select className="form-select" value={motivoAjuste} onChange={(e) => setMotivoAjuste(e.target.value)}>
-                                <option value="Diferencia Inventario">Diferencia de Inventario</option>
-                                <option value="Producto Dañado">Producto Dañado / Merma</option>
-                                <option value="Error de Ingreso">Error de Ingreso Previo</option>
-                            </select>
-                        </div>
-
-                        <div className="form-actions">
-                            <button className="btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
-                            <button className="btn-primary" onClick={ejecutarAjuste}>Guardar Ajuste</button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
