@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getAreas, createArea } from '../services/areaService';
+import { getAreas, createArea } from '../services/areaService'; //
 import { useNavigate } from 'react-router-dom';
 
 export default function AreaPage() {
@@ -17,7 +17,7 @@ export default function AreaPage() {
 
     const cargarAreas = async () => {
         try {
-            const data = await getAreas();
+            const data = await getAreas(); //
             setAreas(data);
         } catch (err) {
             setError('Error al cargar las áreas');
@@ -32,9 +32,9 @@ export default function AreaPage() {
         if (!nuevoNombre.trim()) return;
 
         try {
-            await createArea(nuevoNombre);
+            await createArea(nuevoNombre); //
             setNuevoNombre('');
-            cargarAreas(); // Recargar lista
+            cargarAreas(); 
         } catch (err) {
             setError('No se pudo crear el área. Verifique que no exista ya.');
         }
@@ -42,13 +42,11 @@ export default function AreaPage() {
 
     return (
         <div className="inventory-container">
-            {/* CABECERA */}
             <div className="page-header">
                 <h2 className="page-title">🏢 Gestión de Áreas / Bodegas</h2>
                 <button onClick={() => navigate('/menu')} className="back-btn">⬅ Menú</button>
             </div>
 
-            {/* FORMULARIO DE CREACIÓN */}
             <div className="form-card" style={{ marginBottom: '30px', borderLeft: '5px solid #3182ce' }}>
                 <h3 style={{ marginTop: 0, marginBottom: '15px', color: '#2d3748' }}>➕ Registrar Nueva Ubicación</h3>
                 
@@ -73,7 +71,7 @@ export default function AreaPage() {
                     <button 
                         type="submit" 
                         className="btn-primary"
-                        style={{ height: '46px', padding: '0 30px' }} // Ajuste para alinear altura con el input
+                        style={{ height: '46px', padding: '0 30px' }} 
                         disabled={!nuevoNombre.trim()}
                     >
                         Guardar
@@ -81,7 +79,6 @@ export default function AreaPage() {
                 </form>
             </div>
 
-            {/* LISTA DE ÁREAS (TABLA) */}
             <div className="table-container">
                 <h4 style={{ padding: '15px 20px', margin: 0, borderBottom: '1px solid #eee', background: '#f8f9fa', color: '#4a5568' }}>
                     📍 Listado de Ubicaciones ({areas.length})
@@ -90,7 +87,8 @@ export default function AreaPage() {
                 <table className="responsive-table">
                     <thead>
                         <tr>
-                            <th style={{ width: '80px', textAlign: 'center' }}>ID</th>
+                            {/* Cambio de "ID" a "#" */}
+                            <th style={{ width: '80px', textAlign: 'center' }}>#</th> 
                             <th>Nombre del Área</th>
                             <th style={{ textAlign: 'center' }}>Estado</th>
                         </tr>
@@ -101,10 +99,11 @@ export default function AreaPage() {
                         ) : areas.length === 0 ? (
                             <tr><td colSpan="3" style={{ padding: '20px', textAlign: 'center', color: '#718096' }}>No hay áreas registradas.</td></tr>
                         ) : (
-                            areas.map((area) => (
+                            // Usamos el índice (index) para enumerar
+                            areas.map((area, index) => (
                                 <tr key={area.id}>
-                                    <td data-label="ID" style={{ textAlign: 'center', color: '#718096', fontWeight: 'bold' }}>
-                                        {area.id}
+                                    <td data-label="#" style={{ textAlign: 'center', color: '#718096', fontWeight: 'bold' }}>
+                                        {index + 1} {/* Muestra 1, 2, 3... */}
                                     </td>
                                     <td data-label="Nombre">
                                         <strong style={{ fontSize: '1.1em', color: '#2d3748' }}>{area.nombre}</strong>
