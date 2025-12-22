@@ -19,10 +19,11 @@ export default function NotasPage() {
     const [modoEdicion, setModoEdicion] = useState(false);
     const [notaEditandoId, setNotaEditandoId] = useState(null);
 
+    // Estado inicial con "Venta Diaria" y "Cierre de caja" como predeterminados
     const [formData, setFormData] = useState({
-        title: '',
+        title: 'Cierre de caja',
         date: new Date().toISOString().split('T')[0],
-        category: 'General',
+        category: 'Venta Diaria',
         content: '',
         salesAmount: ''
     });
@@ -67,7 +68,15 @@ export default function NotasPage() {
 
     // --- MANEJO FORMULARIO ---
     const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+        const { name, value } = e.target;
+        let nextData = { ...formData, [name]: value };
+
+        // Si el usuario cambia a Venta Diaria, el título cambia automáticamente a Cierre de caja
+        if (name === 'category' && value === 'Venta Diaria') {
+            nextData.title = 'Cierre de caja';
+        }
+
+        setFormData(nextData);
     };
 
     const cargarParaEditar = (nota) => {
@@ -87,9 +96,9 @@ export default function NotasPage() {
         setModoEdicion(false);
         setNotaEditandoId(null);
         setFormData({
-            title: '',
+            title: 'Cierre de caja',
             date: new Date().toISOString().split('T')[0],
-            category: 'General',
+            category: 'Venta Diaria',
             content: '',
             salesAmount: ''
         });
@@ -132,10 +141,10 @@ export default function NotasPage() {
 
     return (
         <div className="inventory-container">
-            {/* CABECERA */}
+            {/* CABECERA - Cambiada a Gestión de Ventas */}
             <div className="page-header">
                 <div>
-                    <h2 className="page-title">📝 Libro de Novedades</h2>
+                    <h2 className="page-title">💰 Gestión de Ventas</h2>
                     <p style={{ margin: 0, color: '#718096', fontSize: '0.9em' }}>
                         Usuario Activo: <strong>{user?.fullName || user?.username}</strong>
                     </p>
@@ -146,7 +155,7 @@ export default function NotasPage() {
             {/* FORMULARIO DE CREACIÓN / EDICIÓN */}
             <div className="form-card" style={{ marginBottom: '30px', borderLeft: modoEdicion ? '5px solid #d69e2e' : '5px solid #3182ce' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                    <h3 style={{ margin: 0, color: '#2d3748' }}>{modoEdicion ? '✏️ Editando Nota' : '➕ Nueva Nota / Venta'}</h3>
+                    <h3 style={{ margin: 0, color: '#2d3748' }}>{modoEdicion ? '✏️ Editando Venta' : '➕ Nueva Venta / Nota'}</h3>
                     {modoEdicion && (
                         <button onClick={cancelarEdicion} className="btn-secondary" style={{ padding: '5px 10px', fontSize: '0.85em' }}>
                             Cancelar
@@ -163,8 +172,9 @@ export default function NotasPage() {
                     <div className="form-group">
                         <label className="form-label">Categoría</label>
                         <select name="category" value={formData.category} onChange={handleChange} className="form-select">
-                            <option value="General">📌 General / Recordatorio</option>
+                            {/* Venta Diaria primero en la lista */}
                             <option value="Venta Diaria">💰 Venta Diaria (Cierre)</option>
+                            <option value="General">📌 General / Recordatorio</option>
                             <option value="Incidente">⚠️ Incidente</option>
                         </select>
                     </div>
@@ -188,7 +198,7 @@ export default function NotasPage() {
 
                     <div className="form-actions" style={{ gridColumn: '1 / -1', marginTop: '10px' }}>
                         <button type="submit" className="btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
-                            {modoEdicion ? 'Guardar Cambios' : 'Guardar Nota'}
+                            {modoEdicion ? 'Guardar Cambios' : 'Guardar Registro'}
                         </button>
                     </div>
                 </form>
@@ -210,8 +220,8 @@ export default function NotasPage() {
                     <label className="filter-label">Categoría</label>
                     <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)} className="filter-select">
                         <option value="TODAS">Todas</option>
-                        <option value="General">📌 General</option>
                         <option value="Venta Diaria">💰 Venta</option>
+                        <option value="General">📌 General</option>
                         <option value="Incidente">⚠️ Incidente</option>
                     </select>
                 </div>
@@ -229,11 +239,11 @@ export default function NotasPage() {
             {/* LISTADO DE NOTAS */}
             <div style={{ marginTop: '20px' }}>
                 <h3 style={{ margin: '0 0 15px 0', color: '#4a5568', paddingBottom: '10px', borderBottom: '1px solid #e2e8f0' }}>
-                    Historial ({notasFiltradas.length})
+                    Historial de Registros ({notasFiltradas.length})
                 </h3>
                 
-                {loading ? <p style={{textAlign:'center', padding:'20px'}}>Cargando notas...</p> : 
-                 notasFiltradas.length === 0 ? <p style={{textAlign:'center', padding:'20px', color:'#718096'}}>No hay notas que coincidan con los filtros.</p> : (
+                {loading ? <p style={{textAlign:'center', padding:'20px'}}>Cargando...</p> : 
+                 notasFiltradas.length === 0 ? <p style={{textAlign:'center', padding:'20px', color:'#718096'}}>No hay registros que coincidan.</p> : (
                     <div style={{ display: 'grid', gap: '15px' }}>
                         {notasFiltradas.map(nota => (
                             <div key={nota.id} style={{ 
@@ -257,7 +267,6 @@ export default function NotasPage() {
                                         </div>
                                     </div>
                                     
-                                    {/* Botones de Acción */}
                                     <div style={{ display:'flex', gap:'8px' }}>
                                         <button onClick={() => cargarParaEditar(nota)} disabled={modoEdicion} className="btn-secondary" style={{ padding: '5px 10px' }}>✏️</button>
                                         <button onClick={() => handleDelete(nota.id)} disabled={modoEdicion} className="btn-secondary" style={{ padding: '5px 10px', color: '#e53e3e', background: '#fff5f5' }}>🗑️</button>
