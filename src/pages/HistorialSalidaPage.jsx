@@ -207,7 +207,7 @@ export default function HistorialSalidaPage() {
                         </div>
                         
                         <div style={{marginTop: '20px', textAlign: 'right', fontWeight: 'bold', fontSize: '1.1rem'}}>
-                            SUMA TOTAL NETO: {formatCurrency(guiaSeleccionada.totalNeto)}
+                            TOTAL NETO: {formatCurrency(guiaSeleccionada.totalNeto)}
                         </div>
 
                         <div className="form-actions" style={{ marginTop: '20px' }}>

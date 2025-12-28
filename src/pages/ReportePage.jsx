@@ -205,7 +205,7 @@ export default function ReportePage() {
                 <div className="filter-group">
                     <label className="filter-label">1. Tipo Reporte</label>
                     <select value={tipoReporte} onChange={e => setTipoReporte(e.target.value)} className="filter-select">
-                        <option value="GASTOS">📥 Ingreso (Compras)</option>
+                        <option value="GASTOS">📥 Ingreso </option>
                         <option value="CONSUMO">📋 Guía de Consumo</option>
                         <option value="STOCK_FINAL">🏁 Stock Valorizado</option>
                         <option value="COMPARATIVO">⚖️ Ingreso vs Guía</option>
@@ -364,7 +364,7 @@ export default function ReportePage() {
                                 alignItems: 'center'
                             }}>
                                 {tipoReporte === 'GASTOS' && <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>TOTAL INGRESO: ${Math.round(t.ingreso).toLocaleString()}</span>}
-                                {tipoReporte === 'CONSUMO' && <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>TOTAL GUÍA: ${Math.round(t.guia).toLocaleString()}</span>}
+                                {tipoReporte === 'CONSUMO' && <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>TOTAL: ${Math.round(t.guia).toLocaleString()}</span>}
                                 {tipoReporte === 'STOCK_FINAL' && <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>TOTAL VALORIZADO: ${Math.round(t.stock).toLocaleString()}</span>}
                                 {tipoReporte === 'COMPARATIVO' && (
                                     <>

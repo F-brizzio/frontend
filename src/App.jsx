@@ -79,7 +79,7 @@ const MainMenu = () => {
                 <div className="dashboard-grid">
                     {/* --- BOTONES GENERADOS DINÁMICAMENTE --- */}
                     
-                    {renderCard(MODULOS.INGRESO, '/ingresos', '#28a745', '📥', 'Ingreso Mercancía')}
+                    {renderCard(MODULOS.INGRESO, '/ingresos', '#28a745', '📥', 'Ingreso Mercadería')}
                     
                     {renderCard(MODULOS.GUIA_CONSUMO, '/guia-consumo', '#dc3545', '📋', 'Guía de Consumo', '(Salidas / Retiros)')}
                     
