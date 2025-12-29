@@ -362,5 +362,6 @@ export default function ReportePage() {
                 </div>
             )}
         </div>
+        
     );
 }
