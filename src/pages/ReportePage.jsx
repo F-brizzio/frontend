@@ -28,7 +28,6 @@ import autoTable from 'jspdf-autotable';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement); 
 
-// MAPEO DE ETIQUETAS DINÁMICAS
 const etiquetasFiltro = {
     'CATEGORIA': 'Categoría',
     'PROVEEDOR': 'Proveedor',
@@ -122,15 +121,12 @@ export default function ReportePage() {
     };
 
     const procesarGrafico = (datos) => {
-        // ELIMINAR GRÁFICOS PARA COMPARATIVO Y VENTAS
         if (tipoReporte === 'COMPARATIVO' || tipoReporte === 'VENTA_DIARIA') { 
             setChartData(null); 
             return; 
         }
-
         const labels = datos.map(d => d.concepto || d.label || d.fecha);
         const colores = ['#3182ce', '#38a169', '#d69e2e', '#e53e3e', '#805ad5', '#319795', '#718096'];
-
         if (tipoReporte === 'CONSUMO' && entidadFiltro !== 'PRODUCTO') {
             const datasets = [{ label: 'Consumo ($)', data: datos.map(d => d.valorConsumo), backgroundColor: '#38a169' }];
             if (incluirMerma) {
@@ -172,7 +168,6 @@ export default function ReportePage() {
         let head = []; let body = []; let foot = [];
 
         if (tipoReporte === 'COMPARATIVO') {
-            // CABECERA DOBLE SIN COLORES DE FONDO
             head = [
                 [
                     { content: colPrincipal, rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
@@ -201,7 +196,7 @@ export default function ReportePage() {
                 if (tipoReporte==='GASTOS') return [d.label||d.concepto, d.unidadesCompradas?.toLocaleString(), `$${Math.round(d.totalGastado).toLocaleString()}`];
                 if (tipoReporte==='CONSUMO') return [d.label||d.concepto, d.cantConsumo?.toLocaleString(), `$${Math.round(d.valorConsumo).toLocaleString()}`];
                 if (tipoReporte==='STOCK_FINAL') return [d.label||d.concepto, d.stockActual?.toLocaleString(), `$${Math.round(d.valorTotal).toLocaleString()}`];
-                return [d.fecha, `$${Math.round(d.valorTotal).toLocaleString()}`]; // VENTA_DIARIA solo 2 columnas
+                return [d.fecha, `$${Math.round(d.valorTotal).toLocaleString()}`];
             });
             const totalV = tipoReporte==='GASTOS'?t.ingreso:(tipoReporte==='CONSUMO'?t.guia:(tipoReporte==='STOCK_FINAL'?t.stock:t.venta));
             foot = [['TOTAL FINAL', '', `$${Math.round(totalV).toLocaleString()}`]];
@@ -209,10 +204,9 @@ export default function ReportePage() {
 
         autoTable(doc, { 
             startY, head, body, foot, theme: 'grid',
-            headStyles: { textColor: [45,55,72], fontStyle: 'bold', fillColor: [245, 247, 250] }, // Color gris muy suave para cabecera
+            headStyles: { textColor: [45,55,72], fontStyle: 'bold', fillColor: [245, 247, 250], halign: 'center' },
             footStyles: { fillColor: [45,55,72], textColor: [255,255,255], fontStyle: 'bold', halign: 'right' },
             didParseCell: (data) => {
-                // SE ELIMINÓ LA LÓGICA DE COLORES DE FONDO EN EL CUERPO
                 if (data.section==='foot' && data.column.index===0) data.cell.styles.halign = 'left';
             }
         });
@@ -227,7 +221,6 @@ export default function ReportePage() {
             </div>
 
             <div className="filters-panel">
-                {/* ... (Sección de filtros se mantiene igual) ... */}
                 <div className="filter-group">
                     <label className="filter-label">1. Tipo Reporte</label>
                     <select value={tipoReporte} onChange={e => setTipoReporte(e.target.value)} className="filter-select">
@@ -265,7 +258,6 @@ export default function ReportePage() {
                     <label className="filter-label">Hasta</label>
                     <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} className="filter-input" />
                 </div>
-                {/* SUBFILTROS PRODUCTO */}
                 {tipoReporte !== 'VENTA_DIARIA' && entidadFiltro === 'PRODUCTO' && (
                     <div className="filter-group" style={{ gridColumn: '1 / -1' }}>
                         <div style={{ background: '#f7fafc', padding: '15px', borderRadius: '8px', border: '1px solid #edf2f7' }}>
@@ -318,15 +310,15 @@ export default function ReportePage() {
                         </div>
                         
                         <div className="table-container">
-                            <table className="responsive-table">
+                            <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                                 <thead>
                                     {tipoReporte === 'COMPARATIVO' ? (
                                         <>
-                                            {/* CABECERA DOBLE LIMPIA SIN COLORES DE FONDO */}
+                                            {/* CENTRADO FORZADO CON TEXT-ALIGN CENTER */}
                                             <tr>
-                                                <th rowSpan="2" style={{ verticalAlign: 'middle' }}>{etiquetasFiltro[entidadFiltro] || 'Concepto'}</th>
-                                                <th colSpan="2" style={{ textAlign: 'center', fontWeight:'bold' }}>INGRESO</th>
-                                                <th colSpan="2" style={{ textAlign: 'center', fontWeight:'bold' }}>GUÍA</th>
+                                                <th rowSpan="2" style={{ verticalAlign: 'middle', textAlign: 'left' }}>{etiquetasFiltro[entidadFiltro] || 'Concepto'}</th>
+                                                <th colSpan="2" style={{ textAlign: 'center', fontWeight:'bold', borderBottom: '1px solid #e2e8f0' }}>INGRESO</th>
+                                                <th colSpan="2" style={{ textAlign: 'center', fontWeight:'bold', borderBottom: '1px solid #e2e8f0' }}>GUÍA</th>
                                                 <th rowSpan="2" style={{ verticalAlign: 'middle', textAlign: 'right' }}>Balance Valor</th>
                                             </tr>
                                             <tr>
@@ -355,12 +347,10 @@ export default function ReportePage() {
                                             {tipoReporte === 'STOCK_FINAL' && <><td style={{textAlign:'right'}}>{d.stockActual?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.valorTotal).toLocaleString()}</td></>}
                                             {tipoReporte === 'COMPARATIVO' && (
                                                 <>
-                                                    {/* CELDAS SIN COLOR DE FONDO */}
                                                     <td style={{textAlign:'right'}}>{d.ingresoCantidad?.toLocaleString()}</td>
                                                     <td style={{textAlign:'right'}}>${d.ingresoDinero?.toLocaleString()}</td>
                                                     <td style={{textAlign:'right'}}>{d.salidaCantidad?.toLocaleString()}</td>
                                                     <td style={{textAlign:'right'}}>${d.salidaDinero?.toLocaleString()}</td>
-                                                    {/* MANTENEMOS SOLO EL COLOR DEL TEXTO PARA EL BALANCE */}
                                                     <td style={{textAlign:'right', fontWeight:'bold', color: (d.ingresoDinero - d.salidaDinero) >= 0 ? '#2f855a' : '#e53e3e'}}>${(d.ingresoDinero - d.salidaDinero).toLocaleString()}</td>
                                                 </>
                                             )}
@@ -369,6 +359,7 @@ export default function ReportePage() {
                                     ))}
                                 </tbody>
                             </table>
+                            {/* ... (Pie de totales se mantiene igual) ... */}
                             <div style={{ padding: '20px', background: '#f8fafc', borderTop: '2px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '30px', flexWrap: 'wrap', alignItems: 'center' }}>
                                 {tipoReporte === 'GASTOS' && <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>TOTAL INGRESO: ${Math.round(t.ingreso).toLocaleString()}</span>}
                                 {tipoReporte === 'CONSUMO' && <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>TOTAL: ${Math.round(t.guia).toLocaleString()}</span>}
