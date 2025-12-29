@@ -28,6 +28,7 @@ import autoTable from 'jspdf-autotable';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement); 
 
+// --- CONFIGURACIÓN DE ETIQUETAS Y ESTILOS ---
 const etiquetasFiltro = {
     'CATEGORIA': 'Categoría',
     'PROVEEDOR': 'Proveedor',
@@ -35,9 +36,17 @@ const etiquetasFiltro = {
     'PRODUCTO': 'Producto'
 };
 
+const estiloTotalesUniforme = {
+    fontSize: '1.1rem',
+    fontWeight: '700',
+    color: '#2d3748', // Gris pizarra oscuro profesional
+    textTransform: 'uppercase'
+};
+
 export default function ReportePage() {
     const navigate = useNavigate();
     
+    // --- ESTADOS ---
     const [tipoReporte, setTipoReporte] = useState('GASTOS'); 
     const [entidadFiltro, setEntidadFiltro] = useState('CATEGORIA');
     const [fechaInicio, setFechaInicio] = useState(new Date().toISOString().split('T')[0]);
@@ -100,6 +109,7 @@ export default function ReportePage() {
 
     useEffect(() => { if (tablaData.length > 0) procesarGrafico(tablaData); }, [incluirMerma]);
 
+    // --- LÓGICA DE NEGOCIO ---
     const handleGenerar = async () => {
         setTablaData([]); setChartData(null);
         try {
@@ -121,12 +131,15 @@ export default function ReportePage() {
     };
 
     const procesarGrafico = (datos) => {
+        // Eliminar gráficos para Comparativo y Evolución de Ventas
         if (tipoReporte === 'COMPARATIVO' || tipoReporte === 'VENTA_DIARIA') { 
             setChartData(null); 
             return; 
         }
+
         const labels = datos.map(d => d.concepto || d.label || d.fecha);
         const colores = ['#3182ce', '#38a169', '#d69e2e', '#e53e3e', '#805ad5', '#319795', '#718096'];
+
         if (tipoReporte === 'CONSUMO' && entidadFiltro !== 'PRODUCTO') {
             const datasets = [{ label: 'Consumo ($)', data: datos.map(d => d.valorConsumo), backgroundColor: '#38a169' }];
             if (incluirMerma) {
@@ -152,6 +165,7 @@ export default function ReportePage() {
     };
     const t = calcularTotales();
 
+    // --- PDF ---
     const descargarPDF = async () => {
         const doc = new jsPDF();
         const headerElement = document.getElementById('report-header-section'); 
@@ -205,7 +219,7 @@ export default function ReportePage() {
         autoTable(doc, { 
             startY, head, body, foot, theme: 'grid',
             headStyles: { textColor: [45,55,72], fontStyle: 'bold', fillColor: [245, 247, 250], halign: 'center' },
-            footStyles: { fillColor: [45,55,72], textColor: [255,255,255], fontStyle: 'bold', halign: 'right' },
+            footStyles: { fillColor: [248, 250, 252], textColor: [45, 55, 72], fontStyle: 'bold', halign: 'right' },
             didParseCell: (data) => {
                 if (data.section==='foot' && data.column.index===0) data.cell.styles.halign = 'left';
             }
@@ -231,14 +245,16 @@ export default function ReportePage() {
                         <option value="VENTA_DIARIA">📈 Evolución Ventas</option>
                     </select>
                 </div>
-                {tipoReporte === 'CONSUMO' && (
-                    <div className="filter-group" style={{ justifyContent:'flex-end' }}>
-                        <div style={{display:'flex', alignItems:'center', background:'white', padding:'10px', borderRadius:'6px', border:'1px solid #e2e8f0'}}>
-                            <input type="checkbox" checked={incluirMerma} onChange={e => setIncluirMerma(e.target.checked)} style={{width:'20px', height:'20px', marginRight:'10px'}}/>
-                            <span style={{fontWeight:'600', color: incluirMerma ? '#dc3545' : '#4a5568'}}>Ver Mermas</span>
-                        </div>
-                    </div>
-                )}
+
+                <div className="filter-group">
+                    <label className="filter-label">Desde</label>
+                    <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} className="filter-input" />
+                </div>
+                <div className="filter-group">
+                    <label className="filter-label">Hasta</label>
+                    <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} className="filter-input" />
+                </div>
+
                 {tipoReporte !== 'VENTA_DIARIA' && (
                     <div className="filter-group">
                         <label className="filter-label">2. Agrupar Por</label>
@@ -250,38 +266,7 @@ export default function ReportePage() {
                         </select>
                     </div>
                 )}
-                <div className="filter-group">
-                    <label className="filter-label">Desde</label>
-                    <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} className="filter-input" />
-                </div>
-                <div className="filter-group">
-                    <label className="filter-label">Hasta</label>
-                    <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} className="filter-input" />
-                </div>
-                {tipoReporte !== 'VENTA_DIARIA' && entidadFiltro === 'PRODUCTO' && (
-                    <div className="filter-group" style={{ gridColumn: '1 / -1' }}>
-                        <div style={{ background: '#f7fafc', padding: '15px', borderRadius: '8px', border: '1px solid #edf2f7' }}>
-                            <label className="filter-label">Filtrar lista de productos por:</label>
-                            <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', marginTop:'5px' }}>
-                                <select value={subFiltroTipo} onChange={e => { setSubFiltroTipo(e.target.value); setSubFiltroValor(''); }} className="filter-select" style={{flex:1}}>
-                                    <option value="TODOS">Todos</option>
-                                    <option value="CATEGORIA">Categoría</option>
-                                    <option value="PROVEEDOR">Proveedor</option>
-                                    <option value="AREA">Área</option>
-                                </select>
-                                {subFiltroTipo !== 'TODOS' && (
-                                    <select value={subFiltroValor} onChange={e => setSubFiltroValor(e.target.value)} className="filter-select" style={{flex:1}}>
-                                        <option value="">- Seleccionar -</option>
-                                        {opcionesSubFiltro.map(op => <option key={op} value={op}>{op}</option>)}
-                                    </select>
-                                )}
-                            </div>
-                            <div style={{marginTop:'10px'}}>
-                                <MultiSelect label="Selección Específica:" options={opcionesDisponibles} selectedValues={seleccionados} onChange={setSeleccionados} />
-                            </div>
-                        </div>
-                    </div>
-                )}
+
                 <div className="filter-group" style={{ gridColumn: '1 / -1', marginTop:'10px' }}>
                     <button onClick={handleGenerar} className="btn-primary" style={{width:'100%', justifyContent:'center'}}>📊 Generar Reporte</button>
                 </div>
@@ -314,25 +299,24 @@ export default function ReportePage() {
                                 <thead>
                                     {tipoReporte === 'COMPARATIVO' ? (
                                         <>
-                                            {/* CENTRADO FORZADO CON TEXT-ALIGN CENTER */}
                                             <tr>
-                                                <th rowSpan="2" style={{ verticalAlign: 'middle', textAlign: 'left' }}>{etiquetasFiltro[entidadFiltro] || 'Concepto'}</th>
-                                                <th colSpan="2" style={{ textAlign: 'center', fontWeight:'bold', borderBottom: '1px solid #e2e8f0' }}>INGRESO</th>
-                                                <th colSpan="2" style={{ textAlign: 'center', fontWeight:'bold', borderBottom: '1px solid #e2e8f0' }}>GUÍA</th>
-                                                <th rowSpan="2" style={{ verticalAlign: 'middle', textAlign: 'right' }}>Balance Valor</th>
+                                                <th rowSpan="2" style={{ verticalAlign: 'middle', textAlign: 'left', border: 'none' }}>{etiquetasFiltro[entidadFiltro] || 'Concepto'}</th>
+                                                <th colSpan="2" style={{ textAlign: 'center', fontWeight:'bold', border: 'none' }}>INGRESO</th>
+                                                <th colSpan="2" style={{ textAlign: 'center', fontWeight:'bold', border: 'none' }}>GUÍA</th>
+                                                <th rowSpan="2" style={{ verticalAlign: 'middle', textAlign: 'right', border: 'none' }}>Balance Valor</th>
                                             </tr>
                                             <tr>
-                                                <th style={{ textAlign: 'right' }}>Unidad</th>
-                                                <th style={{ textAlign: 'right' }}>Valor</th>
-                                                <th style={{ textAlign: 'right' }}>Unidad</th>
-                                                <th style={{ textAlign: 'right' }}>Valor</th>
+                                                <th style={{ textAlign: 'right', border: 'none' }}>Unidad</th>
+                                                <th style={{ textAlign: 'right', border: 'none' }}>Valor</th>
+                                                <th style={{ textAlign: 'right', border: 'none' }}>Unidad</th>
+                                                <th style={{ textAlign: 'right', border: 'none' }}>Valor</th>
                                             </tr>
                                         </>
                                     ) : (
                                         <tr>
                                             <th>{tipoReporte === 'VENTA_DIARIA' ? 'Fecha' : (etiquetasFiltro[entidadFiltro] || 'Concepto')}</th>
                                             {tipoReporte === 'GASTOS' && <><th style={{textAlign:'right'}}>Unidades</th><th style={{textAlign:'right'}}>Total Ingreso ($)</th></>}
-                                            {tipoReporte === 'CONSUMO' && <><th style={{textAlign:'right'}}>Unid. Consumo</th><th style={{textAlign:'right'}}>Costo Consumo ($)</th>{incluirMerma && <><th style={{textAlign:'right', color:'#dc3545'}}>Unid. Merma</th><th style={{textAlign:'right', color:'#dc3545'}}>Costo Merma ($)</th></>}</>}
+                                            {tipoReporte === 'CONSUMO' && <><th style={{textAlign:'right'}}>Unid. Consumo</th><th style={{textAlign:'right'}}>Costo Consumo ($)</th></>}
                                             {tipoReporte === 'STOCK_FINAL' && <><th style={{textAlign:'right'}}>Stock Actual</th><th style={{textAlign:'right'}}>Valor Total ($)</th></>}
                                             {tipoReporte === 'VENTA_DIARIA' && <th style={{textAlign:'right'}}>Venta Total ($)</th>}
                                         </tr>
@@ -343,7 +327,7 @@ export default function ReportePage() {
                                         <tr key={i}>
                                             <td style={{fontWeight:'bold'}}>{d.label || d.concepto || d.fecha}</td>
                                             {tipoReporte === 'GASTOS' && <><td style={{textAlign:'right'}}>{d.unidadesCompradas?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.totalGastado).toLocaleString()}</td></>}
-                                            {tipoReporte === 'CONSUMO' && <><td style={{textAlign:'right'}}>{d.cantConsumo?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.valorConsumo).toLocaleString()}</td>{incluirMerma && <><td style={{textAlign:'right'}}>{d.cantMerma?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.valorMerma).toLocaleString()}</td></>}</>}
+                                            {tipoReporte === 'CONSUMO' && <><td style={{textAlign:'right'}}>{d.cantConsumo?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.valorConsumo).toLocaleString()}</td></>}
                                             {tipoReporte === 'STOCK_FINAL' && <><td style={{textAlign:'right'}}>{d.stockActual?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.valorTotal).toLocaleString()}</td></>}
                                             {tipoReporte === 'COMPARATIVO' && (
                                                 <>
@@ -359,19 +343,19 @@ export default function ReportePage() {
                                     ))}
                                 </tbody>
                             </table>
-                            {/* ... (Pie de totales se mantiene igual) ... */}
+                            
                             <div style={{ padding: '20px', background: '#f8fafc', borderTop: '2px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '30px', flexWrap: 'wrap', alignItems: 'center' }}>
-                                {tipoReporte === 'GASTOS' && <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>TOTAL INGRESO: ${Math.round(t.ingreso).toLocaleString()}</span>}
-                                {tipoReporte === 'CONSUMO' && <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>TOTAL: ${Math.round(t.guia).toLocaleString()}</span>}
-                                {tipoReporte === 'STOCK_FINAL' && <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>TOTAL VALORIZADO: ${Math.round(t.stock).toLocaleString()}</span>}
+                                {tipoReporte === 'GASTOS' && <span style={estiloTotalesUniforme}>TOTAL INGRESO: ${Math.round(t.ingreso).toLocaleString()}</span>}
+                                {tipoReporte === 'CONSUMO' && <span style={estiloTotalesUniforme}>TOTAL CONSUMO: ${Math.round(t.guia).toLocaleString()}</span>}
+                                {tipoReporte === 'STOCK_FINAL' && <span style={estiloTotalesUniforme}>TOTAL VALORIZADO: ${Math.round(t.stock).toLocaleString()}</span>}
                                 {tipoReporte === 'COMPARATIVO' && (
                                     <>
-                                        <span style={{ fontWeight:'bold' }}>TOTAL INGRESO: ${t.ingreso.toLocaleString()}</span>
-                                        <span style={{ fontWeight:'bold' }}>TOTAL GUÍA: ${t.guia.toLocaleString()}</span>
-                                        <span style={{ fontSize:'1.2rem', fontWeight:'bold', color: (t.ingreso - t.guia) >= 0 ? '#2f855a' : '#e53e3e' }}>BALANCE TOTAL: ${(t.ingreso - t.guia).toLocaleString()}</span>
+                                        <span style={estiloTotalesUniforme}>INGRESOS: ${t.ingreso.toLocaleString()}</span>
+                                        <span style={estiloTotalesUniforme}>GUÍAS: ${t.guia.toLocaleString()}</span>
+                                        <span style={estiloTotalesUniforme}>BALANCE: ${(t.ingreso - t.guia).toLocaleString()}</span>
                                     </>
                                 )}
-                                {tipoReporte === 'VENTA_DIARIA' && <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#007bff' }}>TOTAL VENTAS: ${Math.round(t.venta).toLocaleString()}</span>}
+                                {tipoReporte === 'VENTA_DIARIA' && <span style={estiloTotalesUniforme}>TOTAL VENTAS: ${Math.round(t.venta).toLocaleString()}</span>}
                             </div>
                         </div>
                     </div>

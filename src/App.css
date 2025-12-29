@@ -830,3 +830,8 @@ html, body {
 .search-results-list {
   animation: fadeInDown 0.2s ease-out;
 }
+/* Corrección para celdas agrupadas en reportes */
+.responsive-table th[colspan] {
+    text-align: center !important;
+    border-bottom: none !important;
+}
