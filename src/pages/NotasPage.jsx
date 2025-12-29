@@ -13,13 +13,14 @@ export default function NotasPage() {
     // --- FILTROS ---
     const [busqueda, setBusqueda] = useState('');
     const [filtroCategoria, setFiltroCategoria] = useState('TODAS');
-    const [filtroTiempo, setFiltroTiempo] = useState('TODO');
+    // Nuevos estados para el rango de fechas
+    const [fechaInicio, setFechaInicio] = useState('');
+    const [fechaFin, setFechaFin] = useState('');
 
     // --- EDICIÓN ---
     const [modoEdicion, setModoEdicion] = useState(false);
     const [notaEditandoId, setNotaEditandoId] = useState(null);
 
-    // Estado inicial con "Venta Diaria" y "Cierre de caja" como predeterminados
     const [formData, setFormData] = useState({
         title: 'Cierre de caja',
         date: new Date().toISOString().split('T')[0],
@@ -43,26 +44,23 @@ export default function NotasPage() {
         }
     };
 
-    // --- FILTRADO ---
+    // --- LÓGICA DE FILTRADO ACTUALIZADA ---
     const notasFiltradas = notas.filter(nota => {
         const matchTexto = nota.title.toLowerCase().includes(busqueda.toLowerCase());
         const matchCat = filtroCategoria === 'TODAS' || nota.category === filtroCategoria;
         
         let matchTiempo = true;
-        if (filtroTiempo !== 'TODO') {
-            const fechaNota = new Date(nota.date);
-            const hoy = new Date();
-            if (filtroTiempo === 'SEMANA') {
-                const hace7dias = new Date(); hace7dias.setDate(hoy.getDate() - 7);
-                matchTiempo = fechaNota >= hace7dias;
-            } else if (filtroTiempo === 'MES') {
-                const hace30dias = new Date(); hace30dias.setDate(hoy.getDate() - 30);
-                matchTiempo = fechaNota >= hace30dias;
-            } else if (filtroTiempo === 'ANO') {
-                const hace365dias = new Date(); hace365dias.setFullYear(hoy.getFullYear() - 1);
-                matchTiempo = fechaNota >= hace365dias;
-            }
+        // La fecha de la nota suele venir como "YYYY-MM-DD"
+        const fechaNota = nota.date; 
+
+        if (fechaInicio && fechaFin) {
+            matchTiempo = fechaNota >= fechaInicio && fechaNota <= fechaFin;
+        } else if (fechaInicio) {
+            matchTiempo = fechaNota >= fechaInicio;
+        } else if (fechaFin) {
+            matchTiempo = fechaNota <= fechaFin;
         }
+
         return matchTexto && matchCat && matchTiempo;
     });
 
@@ -71,7 +69,6 @@ export default function NotasPage() {
         const { name, value } = e.target;
         let nextData = { ...formData, [name]: value };
 
-        // Si el usuario cambia a Venta Diaria, el título cambia automáticamente a Cierre de caja
         if (name === 'category' && value === 'Venta Diaria') {
             nextData.title = 'Cierre de caja';
         }
@@ -130,7 +127,7 @@ export default function NotasPage() {
     };
 
     const handleDelete = async (id) => {
-        if(window.confirm("¿Seguro que deseas eliminar esta nota permanentemente?")) {
+        if(window.confirm("¿Seguro que deseas eliminar esta nota?")) {
             try {
                 await deleteNote(id);
                 cargarNotas();
@@ -141,7 +138,7 @@ export default function NotasPage() {
 
     return (
         <div className="inventory-container">
-            {/* CABECERA - Cambiada a Gestión de Ventas */}
+            {/* CABECERA */}
             <div className="page-header">
                 <div>
                     <h2 className="page-title">💰 Ventas</h2>        
@@ -172,7 +169,6 @@ export default function NotasPage() {
                     <div className="form-group">
                         <label className="form-label">Categoría</label>
                         <select name="category" value={formData.category} onChange={handleChange} className="form-select">
-                            {/* Venta Diaria primero en la lista */}
                             <option value="Venta Diaria">💰 Venta Diaria (Cierre)</option>
                             <option value="General">📌 General / Recordatorio</option>
                             <option value="Incidente">⚠️ Incidente</option>
@@ -181,7 +177,7 @@ export default function NotasPage() {
 
                     <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                         <label className="form-label">Título</label>
-                        <input type="text" name="title" value={formData.title} onChange={handleChange} required placeholder="Ej: Cierre de caja Martes..." className="form-input" />
+                        <input type="text" name="title" value={formData.title} onChange={handleChange} required placeholder="Ej: Cierre de caja..." className="form-input" />
                     </div>
 
                     {formData.category === 'Venta Diaria' && (
@@ -204,9 +200,9 @@ export default function NotasPage() {
                 </form>
             </div>
 
-            {/* BARRA DE FILTROS */}
-            <div className="filters-panel">
-                <div className="filter-group" style={{ flex: 2 }}>
+            {/* BARRA DE FILTROS ACTUALIZADA */}
+            <div className="filters-panel" style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div className="filter-group" style={{ flex: '2 1 200px' }}>
                     <label className="filter-label">🔍 Buscar</label>
                     <input 
                         type="text" 
@@ -216,7 +212,7 @@ export default function NotasPage() {
                         className="filter-input"
                     />
                 </div>
-                <div className="filter-group">
+                <div className="filter-group" style={{ flex: '1 1 150px' }}>
                     <label className="filter-label">Categoría</label>
                     <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)} className="filter-select">
                         <option value="TODAS">Todas</option>
@@ -225,15 +221,35 @@ export default function NotasPage() {
                         <option value="Incidente">⚠️ Incidente</option>
                     </select>
                 </div>
-                <div className="filter-group">
-                    <label className="filter-label">Periodo</label>
-                    <select value={filtroTiempo} onChange={e => setFiltroTiempo(e.target.value)} className="filter-select">
-                        <option value="TODO">📅 Todos</option>
-                        <option value="SEMANA">Última Semana</option>
-                        <option value="MES">Último Mes</option>
-                        <option value="ANO">Último Año</option>
-                    </select>
+                {/* Rango de Fechas */}
+                <div className="filter-group" style={{ flex: '1 1 150px' }}>
+                    <label className="filter-label">Desde</label>
+                    <input 
+                        type="date" 
+                        value={fechaInicio} 
+                        onChange={e => setFechaInicio(e.target.value)} 
+                        className="filter-input"
+                    />
                 </div>
+                <div className="filter-group" style={{ flex: '1 1 150px' }}>
+                    <label className="filter-label">Hasta</label>
+                    <input 
+                        type="date" 
+                        value={fechaFin} 
+                        onChange={e => setFechaFin(e.target.value)} 
+                        className="filter-input"
+                    />
+                </div>
+                {/* Botón para limpiar filtros de fecha */}
+                {(fechaInicio || fechaFin) && (
+                    <button 
+                        onClick={() => { setFechaInicio(''); setFechaFin(''); }}
+                        className="btn-secondary"
+                        style={{ height: '40px', padding: '0 15px' }}
+                    >
+                        Limpiar
+                    </button>
+                )}
             </div>
 
             {/* LISTADO DE NOTAS */}
@@ -243,7 +259,7 @@ export default function NotasPage() {
                 </h3>
                 
                 {loading ? <p style={{textAlign:'center', padding:'20px'}}>Cargando...</p> : 
-                 notasFiltradas.length === 0 ? <p style={{textAlign:'center', padding:'20px', color:'#718096'}}>No hay registros que coincidan.</p> : (
+                 notasFiltradas.length === 0 ? <p style={{textAlign:'center', padding:'20px', color:'#718096'}}>No hay registros en este rango.</p> : (
                     <div style={{ display: 'grid', gap: '15px' }}>
                         {notasFiltradas.map(nota => (
                             <div key={nota.id} style={{ 
@@ -253,8 +269,7 @@ export default function NotasPage() {
                                 borderLeft: nota.category === 'Venta Diaria' ? '5px solid #28a745' : nota.category === 'Incidente' ? '5px solid #e53e3e' : '5px solid #3182ce',
                                 padding: '20px',
                                 boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                                opacity: (modoEdicion && notaEditandoId !== nota.id) ? 0.5 : 1,
-                                transition: 'opacity 0.2s'
+                                opacity: (modoEdicion && notaEditandoId !== nota.id) ? 0.5 : 1
                             }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                                     <div>
@@ -293,4 +308,4 @@ export default function NotasPage() {
             </div>
         </div>
     );
-}
+}77
