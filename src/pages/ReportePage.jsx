@@ -172,18 +172,19 @@ export default function ReportePage() {
         let head = []; let body = []; let foot = [];
 
         if (tipoReporte === 'COMPARATIVO') {
+            // CABECERA DOBLE SIN COLORES DE FONDO
             head = [
                 [
                     { content: colPrincipal, rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
-                    { content: 'INGRESO', colSpan: 2, styles: { halign: 'center', fillColor: [200, 230, 201] } },
-                    { content: 'GUÍA', colSpan: 2, styles: { halign: 'center', fillColor: [255, 205, 210] } },
+                    { content: 'INGRESO', colSpan: 2, styles: { halign: 'center', fontStyle: 'bold' } },
+                    { content: 'GUÍA', colSpan: 2, styles: { halign: 'center', fontStyle: 'bold' } },
                     { content: 'Balance Valor', rowSpan: 2, styles: { valign: 'middle', halign: 'right' } }
                 ],
                 [
-                    { content: 'Unidad', styles: { halign: 'right', fillColor: [232, 245, 233] } },
-                    { content: 'Valor', styles: { halign: 'right', fillColor: [232, 245, 233] } },
-                    { content: 'Unidad', styles: { halign: 'right', fillColor: [255, 235, 238] } },
-                    { content: 'Valor', styles: { halign: 'right', fillColor: [255, 235, 238] } }
+                    { content: 'Unidad', styles: { halign: 'right' } },
+                    { content: 'Valor', styles: { halign: 'right' } },
+                    { content: 'Unidad', styles: { halign: 'right' } },
+                    { content: 'Valor', styles: { halign: 'right' } }
                 ]
             ];
             body = tablaData.map(d => [d.label||d.concepto, d.ingresoCantidad?.toLocaleString(), `$${d.ingresoDinero?.toLocaleString()}`, d.salidaCantidad?.toLocaleString(), `$${d.salidaDinero?.toLocaleString()}`, `$${(d.ingresoDinero-d.salidaDinero).toLocaleString()}`]);
@@ -208,13 +209,10 @@ export default function ReportePage() {
 
         autoTable(doc, { 
             startY, head, body, foot, theme: 'grid',
-            headStyles: { textColor: [45,55,72], fontStyle: 'bold' },
+            headStyles: { textColor: [45,55,72], fontStyle: 'bold', fillColor: [245, 247, 250] }, // Color gris muy suave para cabecera
             footStyles: { fillColor: [45,55,72], textColor: [255,255,255], fontStyle: 'bold', halign: 'right' },
             didParseCell: (data) => {
-                if (tipoReporte==='COMPARATIVO' && data.section==='body') {
-                    if (data.column.index===1 || data.column.index===2) data.cell.styles.fillColor = [240,249,241];
-                    if (data.column.index===3 || data.column.index===4) data.cell.styles.fillColor = [255,245,245];
-                }
+                // SE ELIMINÓ LA LÓGICA DE COLORES DE FONDO EN EL CUERPO
                 if (data.section==='foot' && data.column.index===0) data.cell.styles.halign = 'left';
             }
         });
@@ -324,17 +322,18 @@ export default function ReportePage() {
                                 <thead>
                                     {tipoReporte === 'COMPARATIVO' ? (
                                         <>
+                                            {/* CABECERA DOBLE LIMPIA SIN COLORES DE FONDO */}
                                             <tr>
                                                 <th rowSpan="2" style={{ verticalAlign: 'middle' }}>{etiquetasFiltro[entidadFiltro] || 'Concepto'}</th>
-                                                <th colSpan="2" style={{ backgroundColor: 'rgba(40, 167, 69, 0.2)', textAlign: 'center', color: '#2f855a' }}>INGRESO</th>
-                                                <th colSpan="2" style={{ backgroundColor: 'rgba(220, 53, 69, 0.2)', textAlign: 'center', color: '#c53030' }}>GUÍA</th>
+                                                <th colSpan="2" style={{ textAlign: 'center', fontWeight:'bold' }}>INGRESO</th>
+                                                <th colSpan="2" style={{ textAlign: 'center', fontWeight:'bold' }}>GUÍA</th>
                                                 <th rowSpan="2" style={{ verticalAlign: 'middle', textAlign: 'right' }}>Balance Valor</th>
                                             </tr>
                                             <tr>
-                                                <th style={{ backgroundColor: 'rgba(40, 167, 69, 0.1)', textAlign: 'right' }}>Unidad</th>
-                                                <th style={{ backgroundColor: 'rgba(40, 167, 69, 0.1)', textAlign: 'right' }}>Valor</th>
-                                                <th style={{ backgroundColor: 'rgba(220, 53, 69, 0.1)', textAlign: 'right' }}>Unidad</th>
-                                                <th style={{ backgroundColor: 'rgba(220, 53, 69, 0.1)', textAlign: 'right' }}>Valor</th>
+                                                <th style={{ textAlign: 'right' }}>Unidad</th>
+                                                <th style={{ textAlign: 'right' }}>Valor</th>
+                                                <th style={{ textAlign: 'right' }}>Unidad</th>
+                                                <th style={{ textAlign: 'right' }}>Valor</th>
                                             </tr>
                                         </>
                                     ) : (
@@ -356,10 +355,12 @@ export default function ReportePage() {
                                             {tipoReporte === 'STOCK_FINAL' && <><td style={{textAlign:'right'}}>{d.stockActual?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.valorTotal).toLocaleString()}</td></>}
                                             {tipoReporte === 'COMPARATIVO' && (
                                                 <>
-                                                    <td style={{textAlign:'right', backgroundColor: 'rgba(40, 167, 69, 0.05)'}}>{d.ingresoCantidad?.toLocaleString()}</td>
-                                                    <td style={{textAlign:'right', backgroundColor: 'rgba(40, 167, 69, 0.05)'}}>${d.ingresoDinero?.toLocaleString()}</td>
-                                                    <td style={{textAlign:'right', backgroundColor: 'rgba(220, 53, 69, 0.05)'}}>{d.salidaCantidad?.toLocaleString()}</td>
-                                                    <td style={{textAlign:'right', backgroundColor: 'rgba(220, 53, 69, 0.05)'}}>${d.salidaDinero?.toLocaleString()}</td>
+                                                    {/* CELDAS SIN COLOR DE FONDO */}
+                                                    <td style={{textAlign:'right'}}>{d.ingresoCantidad?.toLocaleString()}</td>
+                                                    <td style={{textAlign:'right'}}>${d.ingresoDinero?.toLocaleString()}</td>
+                                                    <td style={{textAlign:'right'}}>{d.salidaCantidad?.toLocaleString()}</td>
+                                                    <td style={{textAlign:'right'}}>${d.salidaDinero?.toLocaleString()}</td>
+                                                    {/* MANTENEMOS SOLO EL COLOR DEL TEXTO PARA EL BALANCE */}
                                                     <td style={{textAlign:'right', fontWeight:'bold', color: (d.ingresoDinero - d.salidaDinero) >= 0 ? '#2f855a' : '#e53e3e'}}>${(d.ingresoDinero - d.salidaDinero).toLocaleString()}</td>
                                                 </>
                                             )}
