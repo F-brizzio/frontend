@@ -28,7 +28,6 @@ import autoTable from 'jspdf-autotable';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement); 
 
-// --- CONFIGURACIÓN DE ETIQUETAS Y ESTILOS ---
 const etiquetasFiltro = {
     'CATEGORIA': 'Categoría',
     'PROVEEDOR': 'Proveedor',
@@ -39,19 +38,18 @@ const etiquetasFiltro = {
 const estiloTotalesUniforme = {
     fontSize: '1.1rem',
     fontWeight: '700',
-    color: '#2d3748', // Gris pizarra oscuro profesional
+    color: '#2d3748',
     textTransform: 'uppercase'
 };
 
 export default function ReportePage() {
     const navigate = useNavigate();
     
-    // --- ESTADOS ---
     const [tipoReporte, setTipoReporte] = useState('GASTOS'); 
     const [entidadFiltro, setEntidadFiltro] = useState('CATEGORIA');
     const [fechaInicio, setFechaInicio] = useState(new Date().toISOString().split('T')[0]);
     const [fechaFin, setFechaFin] = useState(new Date().toISOString().split('T')[0]);
-    const [incluirMerma, setIncluirMerma] = useState(false); 
+    const [incluirMerma, setIncluirMerma] = useState(false); // <--- ESTADO DE MERMA
 
     const [maestroProductos, setMaestroProductos] = useState([]); 
     const [subFiltroTipo, setSubFiltroTipo] = useState('TODOS'); 
@@ -107,9 +105,9 @@ export default function ReportePage() {
         setOpcionesDisponibles(filtrados.map(p => ({ value: `${p.sku} - ${p.nombre}`, label: `${p.sku} - ${p.nombre}` })));
     }, [subFiltroTipo, subFiltroValor, maestroProductos, entidadFiltro]);
 
+    // Re-procesar gráfico al cambiar el check de merma
     useEffect(() => { if (tablaData.length > 0) procesarGrafico(tablaData); }, [incluirMerma]);
 
-    // --- LÓGICA DE NEGOCIO ---
     const handleGenerar = async () => {
         setTablaData([]); setChartData(null);
         try {
@@ -131,7 +129,6 @@ export default function ReportePage() {
     };
 
     const procesarGrafico = (datos) => {
-        // Eliminar gráficos para Comparativo y Evolución de Ventas
         if (tipoReporte === 'COMPARATIVO' || tipoReporte === 'VENTA_DIARIA') { 
             setChartData(null); 
             return; 
@@ -140,11 +137,16 @@ export default function ReportePage() {
         const labels = datos.map(d => d.concepto || d.label || d.fecha);
         const colores = ['#3182ce', '#38a169', '#d69e2e', '#e53e3e', '#805ad5', '#319795', '#718096'];
 
-        if (tipoReporte === 'CONSUMO' && entidadFiltro !== 'PRODUCTO') {
-            const datasets = [{ label: 'Consumo ($)', data: datos.map(d => d.valorConsumo), backgroundColor: '#38a169' }];
+        if (tipoReporte === 'CONSUMO') {
+            // Si hay merma, usamos gráfico de BARRAS para comparar side-by-side
             if (incluirMerma) {
-                datasets.push({ label: 'Merma ($)', data: datos.map(d => d.valorMerma), backgroundColor: '#e53e3e' });
-                setChartData({ labels, datasets });
+                setChartData({
+                    labels,
+                    datasets: [
+                        { label: 'Consumo ($)', data: datos.map(d => d.valorConsumo), backgroundColor: '#38a169' },
+                        { label: 'Merma ($)', data: datos.map(d => d.valorMerma), backgroundColor: '#e53e3e' }
+                    ]
+                });
             } else {
                 setChartData({ labels, datasets: [{ label: 'Total ($)', data: datos.map(d => d.valorConsumo), backgroundColor: colores }] });
             }
@@ -154,18 +156,18 @@ export default function ReportePage() {
     };
 
     const calcularTotales = () => {
-        let t = { ingreso: 0, guia: 0, stock: 0, venta: 0 };
+        let t = { ingreso: 0, guia: 0, stock: 0, venta: 0, merma: 0 };
         tablaData.forEach(d => {
             t.ingreso += (d.totalGastado || d.ingresoDinero || 0);
             t.guia += (d.valorConsumo || d.salidaDinero || 0);
             t.stock += (d.valorTotal || 0);
             t.venta += (d.valorTotal || 0);
+            t.merma += (d.valorMerma || 0); // <--- SUMA DE MERMA
         });
         return t;
     };
     const t = calcularTotales();
 
-    // --- PDF ---
     const descargarPDF = async () => {
         const doc = new jsPDF();
         const headerElement = document.getElementById('report-header-section'); 
@@ -182,47 +184,50 @@ export default function ReportePage() {
         let head = []; let body = []; let foot = [];
 
         if (tipoReporte === 'COMPARATIVO') {
-            head = [
-                [
-                    { content: colPrincipal, rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
-                    { content: 'INGRESO', colSpan: 2, styles: { halign: 'center', fontStyle: 'bold' } },
-                    { content: 'GUÍA', colSpan: 2, styles: { halign: 'center', fontStyle: 'bold' } },
-                    { content: 'Balance Valor', rowSpan: 2, styles: { valign: 'middle', halign: 'right' } }
-                ],
-                [
-                    { content: 'Unidad', styles: { halign: 'right' } },
-                    { content: 'Valor', styles: { halign: 'right' } },
-                    { content: 'Unidad', styles: { halign: 'right' } },
-                    { content: 'Valor', styles: { halign: 'right' } }
-                ]
-            ];
+            // ... (Mantiene tu lógica de comparativo igual)
+            head = [[{ content: colPrincipal, rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },{ content: 'INGRESO', colSpan: 2, styles: { halign: 'center', fontStyle: 'bold' } },{ content: 'GUÍA', colSpan: 2, styles: { halign: 'center', fontStyle: 'bold' } },{ content: 'Balance Valor', rowSpan: 2, styles: { valign: 'middle', halign: 'right' } }],[{ content: 'Unidad', styles: { halign: 'right' } },{ content: 'Valor', styles: { halign: 'right' } },{ content: 'Unidad', styles: { halign: 'right' } },{ content: 'Valor', styles: { halign: 'right' } }]];
             body = tablaData.map(d => [d.label||d.concepto, d.ingresoCantidad?.toLocaleString(), `$${d.ingresoDinero?.toLocaleString()}`, d.salidaCantidad?.toLocaleString(), `$${d.salidaDinero?.toLocaleString()}`, `$${(d.ingresoDinero-d.salidaDinero).toLocaleString()}`]);
             foot = [['TOTALES', '', `$${t.ingreso.toLocaleString()}`, '', `$${t.guia.toLocaleString()}`, `$${(t.ingreso-t.guia).toLocaleString()}`]];
         } else {
-            const hMap = { 
-                'GASTOS': [colPrincipal, 'Unidades', 'Total ($)'], 
-                'CONSUMO': [colPrincipal, 'Unid. Consumo', 'Costo Consumo ($)'], 
-                'STOCK_FINAL': [colPrincipal, 'Stock Actual', 'Valor Total ($)'], 
-                'VENTA_DIARIA': ['Fecha', 'Venta Total ($)'] 
-            };
-            head = [hMap[tipoReporte]];
+            // LÓGICA DE COLUMNAS DINÁMICAS PARA EL PDF
+            let columnas = [colPrincipal];
+            if (tipoReporte === 'GASTOS') columnas.push('Unidades', 'Total ($)');
+            if (tipoReporte === 'CONSUMO') {
+                columnas.push('Unid. Consumo', 'Costo Consumo ($)');
+                if (incluirMerma) columnas.push('Unid. Merma', 'Pérdida Merma ($)'); // <--- AGREGAR AL PDF
+            }
+            if (tipoReporte === 'STOCK_FINAL') columnas.push('Stock Actual', 'Valor Total ($)');
+            if (tipoReporte === 'VENTA_DIARIA') columnas.push('Venta Total ($)');
+
+            head = [columnas];
             body = tablaData.map(d => {
-                if (tipoReporte==='GASTOS') return [d.label||d.concepto, d.unidadesCompradas?.toLocaleString(), `$${Math.round(d.totalGastado).toLocaleString()}`];
-                if (tipoReporte==='CONSUMO') return [d.label||d.concepto, d.cantConsumo?.toLocaleString(), `$${Math.round(d.valorConsumo).toLocaleString()}`];
-                if (tipoReporte==='STOCK_FINAL') return [d.label||d.concepto, d.stockActual?.toLocaleString(), `$${Math.round(d.valorTotal).toLocaleString()}`];
-                return [d.fecha, `$${Math.round(d.valorTotal).toLocaleString()}`];
+                let fila = [d.label || d.concepto || d.fecha];
+                if (tipoReporte==='GASTOS') fila.push(d.unidadesCompradas?.toLocaleString(), `$${Math.round(d.totalGastado).toLocaleString()}`);
+                if (tipoReporte==='CONSUMO') {
+                    fila.push(d.cantConsumo?.toLocaleString(), `$${Math.round(d.valorConsumo).toLocaleString()}`);
+                    if (incluirMerma) fila.push(d.cantMerma?.toLocaleString(), `$${Math.round(d.valorMerma).toLocaleString()}`);
+                }
+                if (tipoReporte==='STOCK_FINAL') fila.push(d.stockActual?.toLocaleString(), `$${Math.round(d.valorTotal).toLocaleString()}`);
+                if (tipoReporte==='VENTA_DIARIA') fila.push(`$${Math.round(d.valorTotal).toLocaleString()}`);
+                return fila;
             });
-            const totalV = tipoReporte==='GASTOS'?t.ingreso:(tipoReporte==='CONSUMO'?t.guia:(tipoReporte==='STOCK_FINAL'?t.stock:t.venta));
-            foot = [['TOTAL FINAL', '', `$${Math.round(totalV).toLocaleString()}`]];
+
+            // Pie de tabla dinámico
+            let pieFila = ['TOTAL FINAL'];
+            if (tipoReporte==='CONSUMO' && incluirMerma) {
+                pieFila.push('', `$${Math.round(t.guia).toLocaleString()}`, '', `$${Math.round(t.merma).toLocaleString()}`);
+            } else {
+                const totalV = tipoReporte==='GASTOS'?t.ingreso:(tipoReporte==='CONSUMO'?t.guia:(tipoReporte==='STOCK_FINAL'?t.stock:t.venta));
+                pieFila.push('', `$${Math.round(totalV).toLocaleString()}`);
+            }
+            foot = [pieFila];
         }
 
         autoTable(doc, { 
             startY, head, body, foot, theme: 'grid',
             headStyles: { textColor: [45,55,72], fontStyle: 'bold', fillColor: [245, 247, 250], halign: 'center' },
             footStyles: { fillColor: [248, 250, 252], textColor: [45, 55, 72], fontStyle: 'bold', halign: 'right' },
-            didParseCell: (data) => {
-                if (data.section==='foot' && data.column.index===0) data.cell.styles.halign = 'left';
-            }
+            didParseCell: (data) => { if (data.section==='foot' && data.column.index===0) data.cell.styles.halign = 'left'; }
         });
         doc.save(`Reporte_${tipoReporte}.pdf`);
     };
@@ -245,6 +250,22 @@ export default function ReportePage() {
                         <option value="VENTA_DIARIA">📈 Evolución Ventas</option>
                     </select>
                 </div>
+
+                {/* --- NUEVO SELECTOR DE MERMA --- */}
+                {tipoReporte === 'CONSUMO' && (
+                    <div className="filter-group">
+                        <label className="filter-label">¿Ver Mermas?</label>
+                        <div style={{ display:'flex', alignItems:'center', background:'white', padding:'8px', borderRadius:'6px', border:'1px solid #e2e8f0', height:'38px' }}>
+                            <input 
+                                type="checkbox" 
+                                checked={incluirMerma} 
+                                onChange={e => setIncluirMerma(e.target.checked)} 
+                                style={{ width:'18px', height:'18px', cursor:'pointer' }}
+                            />
+                            <span style={{ marginLeft:'8px', fontSize:'0.9rem', fontWeight:'600', color: incluirMerma ? '#e53e3e' : '#718096' }}>Incluir Mermas</span>
+                        </div>
+                    </div>
+                )}
 
                 <div className="filter-group">
                     <label className="filter-label">Desde</label>
@@ -280,16 +301,21 @@ export default function ReportePage() {
 
                     <div style={{ background: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                         <div id="report-header-section" style={{ background:'white', padding:'10px' }}>
-                            <h3 style={{textAlign:'center', color:'#2d3748', textTransform: 'uppercase'}}>
+                            <h3 style={{textAlign:'center', color:'#2d3748', textTransform: 'uppercase', marginBottom:'20px'}}>
                                 {tipoReporte === 'GASTOS' ? `INGRESO POR ${entidadFiltro}` : 
-                                 tipoReporte === 'CONSUMO' ? `GUÍA DE CONSUMO POR ${entidadFiltro}` : 
+                                 tipoReporte === 'CONSUMO' ? `GUÍA DE CONSUMO ${incluirMerma ? 'Y MERMAS ' : ''}POR ${entidadFiltro}` : 
                                  tipoReporte === 'STOCK_FINAL' ? `STOCK VALORIZADO POR ${entidadFiltro}` :
                                  tipoReporte === 'COMPARATIVO' ? `INGRESO VS GUÍA POR ${entidadFiltro}` :
                                  'EVOLUCIÓN DE VENTAS'}
                             </h3>
                             {chartData && (
                                 <div style={{ height: '350px', marginBottom: '40px' }}>
-                                    <Pie data={chartData} options={{ responsive: true, maintainAspectRatio: false, plugins:{ legend:{ position:'right' } } }} />
+                                    {/* Si es merma, usamos Bar, si no Pie */}
+                                    {incluirMerma ? (
+                                        <Bar data={chartData} options={{ responsive: true, maintainAspectRatio: false, plugins:{ legend:{ position:'bottom' } } }} />
+                                    ) : (
+                                        <Pie data={chartData} options={{ responsive: true, maintainAspectRatio: false, plugins:{ legend:{ position:'right' } } }} />
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -298,25 +324,20 @@ export default function ReportePage() {
                             <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                                 <thead>
                                     {tipoReporte === 'COMPARATIVO' ? (
-                                        <>
-                                            <tr>
-                                                <th rowSpan="2" style={{ verticalAlign: 'middle', textAlign: 'left', border: 'none' }}>{etiquetasFiltro[entidadFiltro] || 'Concepto'}</th>
-                                                <th colSpan="2" style={{ textAlign: 'center', fontWeight:'bold', border: 'none' }}>INGRESO</th>
-                                                <th colSpan="2" style={{ textAlign: 'center', fontWeight:'bold', border: 'none' }}>GUÍA</th>
-                                                <th rowSpan="2" style={{ verticalAlign: 'middle', textAlign: 'right', border: 'none' }}>Balance Valor</th>
-                                            </tr>
-                                            <tr>
-                                                <th style={{ textAlign: 'right', border: 'none' }}>Unidad</th>
-                                                <th style={{ textAlign: 'right', border: 'none' }}>Valor</th>
-                                                <th style={{ textAlign: 'right', border: 'none' }}>Unidad</th>
-                                                <th style={{ textAlign: 'right', border: 'none' }}>Valor</th>
-                                            </tr>
-                                        </>
+                                       // ... (Tu cabecera de comparativo se mantiene)
+                                       <><tr><th rowSpan="2" style={{ verticalAlign: 'middle', textAlign: 'left', border: 'none' }}>{etiquetasFiltro[entidadFiltro] || 'Concepto'}</th><th colSpan="2" style={{ textAlign: 'center', fontWeight:'bold', border: 'none' }}>INGRESO</th><th colSpan="2" style={{ textAlign: 'center', fontWeight:'bold', border: 'none' }}>GUÍA</th><th rowSpan="2" style={{ verticalAlign: 'middle', textAlign: 'right', border: 'none' }}>Balance Valor</th></tr><tr><th style={{ textAlign: 'right', border: 'none' }}>Unidad</th><th style={{ textAlign: 'right', border: 'none' }}>Valor</th><th style={{ textAlign: 'right', border: 'none' }}>Unidad</th><th style={{ textAlign: 'right', border: 'none' }}>Valor</th></tr></>
                                     ) : (
                                         <tr>
                                             <th>{tipoReporte === 'VENTA_DIARIA' ? 'Fecha' : (etiquetasFiltro[entidadFiltro] || 'Concepto')}</th>
                                             {tipoReporte === 'GASTOS' && <><th style={{textAlign:'right'}}>Unidades</th><th style={{textAlign:'right'}}>Total Ingreso ($)</th></>}
-                                            {tipoReporte === 'CONSUMO' && <><th style={{textAlign:'right'}}>Unid. Consumo</th><th style={{textAlign:'right'}}>Costo Consumo ($)</th></>}
+                                            {tipoReporte === 'CONSUMO' && (
+                                                <>
+                                                    <th style={{textAlign:'right'}}>Unid. Consumo</th>
+                                                    <th style={{textAlign:'right'}}>Costo Consumo ($)</th>
+                                                    {incluirMerma && <th style={{textAlign:'right', color:'#e53e3e'}}>Unid. Merma</th>}
+                                                    {incluirMerma && <th style={{textAlign:'right', color:'#e53e3e'}}>Pérdida Merma ($)</th>}
+                                                </>
+                                            )}
                                             {tipoReporte === 'STOCK_FINAL' && <><th style={{textAlign:'right'}}>Stock Actual</th><th style={{textAlign:'right'}}>Valor Total ($)</th></>}
                                             {tipoReporte === 'VENTA_DIARIA' && <th style={{textAlign:'right'}}>Venta Total ($)</th>}
                                         </tr>
@@ -327,7 +348,14 @@ export default function ReportePage() {
                                         <tr key={i}>
                                             <td style={{fontWeight:'bold'}}>{d.label || d.concepto || d.fecha}</td>
                                             {tipoReporte === 'GASTOS' && <><td style={{textAlign:'right'}}>{d.unidadesCompradas?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.totalGastado).toLocaleString()}</td></>}
-                                            {tipoReporte === 'CONSUMO' && <><td style={{textAlign:'right'}}>{d.cantConsumo?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.valorConsumo).toLocaleString()}</td></>}
+                                            {tipoReporte === 'CONSUMO' && (
+                                                <>
+                                                    <td style={{textAlign:'right'}}>{d.cantConsumo?.toLocaleString()}</td>
+                                                    <td style={{textAlign:'right'}}>${Math.round(d.valorConsumo).toLocaleString()}</td>
+                                                    {incluirMerma && <td style={{textAlign:'right', color:'#e53e3e'}}>{d.cantMerma?.toLocaleString()}</td>}
+                                                    {incluirMerma && <td style={{textAlign:'right', color:'#e53e3e'}}>${Math.round(d.valorMerma).toLocaleString()}</td>}
+                                                </>
+                                            )}
                                             {tipoReporte === 'STOCK_FINAL' && <><td style={{textAlign:'right'}}>{d.stockActual?.toLocaleString()}</td><td style={{textAlign:'right'}}>${Math.round(d.valorTotal).toLocaleString()}</td></>}
                                             {tipoReporte === 'COMPARATIVO' && (
                                                 <>
@@ -346,7 +374,12 @@ export default function ReportePage() {
                             
                             <div style={{ padding: '20px', background: '#f8fafc', borderTop: '2px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '30px', flexWrap: 'wrap', alignItems: 'center' }}>
                                 {tipoReporte === 'GASTOS' && <span style={estiloTotalesUniforme}>TOTAL INGRESO: ${Math.round(t.ingreso).toLocaleString()}</span>}
-                                {tipoReporte === 'CONSUMO' && <span style={estiloTotalesUniforme}>TOTAL CONSUMO: ${Math.round(t.guia).toLocaleString()}</span>}
+                                {tipoReporte === 'CONSUMO' && (
+                                    <>
+                                        <span style={estiloTotalesUniforme}>TOTAL CONSUMO: ${Math.round(t.guia).toLocaleString()}</span>
+                                        {incluirMerma && <span style={{...estiloTotalesUniforme, color:'#e53e3e'}}>TOTAL MERMAS: ${Math.round(t.merma).toLocaleString()}</span>}
+                                    </>
+                                )}
                                 {tipoReporte === 'STOCK_FINAL' && <span style={estiloTotalesUniforme}>TOTAL VALORIZADO: ${Math.round(t.stock).toLocaleString()}</span>}
                                 {tipoReporte === 'COMPARATIVO' && (
                                     <>
@@ -362,6 +395,5 @@ export default function ReportePage() {
                 </div>
             )}
         </div>
-        
     );
 }
