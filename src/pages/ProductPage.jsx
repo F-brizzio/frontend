@@ -10,7 +10,7 @@ export default function ProductPage() {
     const [searchTerm, setSearchTerm] = useState(''); 
     const [isEditing, setIsEditing] = useState(false); 
     const [currentId, setCurrentId] = useState(null); 
-    const [showConfirmModal, setShowConfirmModal] = useState(false); // Modal de confirmación
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
 
     const initialForm = {
         productId: '',      
@@ -38,9 +38,10 @@ export default function ProductPage() {
         }
     };
 
-    // --- LÓGICA DE AUTOCOMPLETADO ---
-    // Extraemos categorías únicas de los productos existentes para el datalist
-    const categoriasExistentes = [...new Set(products.map(p => p.category).filter(Boolean))].sort();
+    // --- LÓGICA DE AUTOCOMPLETADO (Normalizada a Mayúsculas) ---
+    const categoriasExistentes = [
+        ...new Set(products.map(p => p.category?.toUpperCase()).filter(Boolean))
+    ].sort();
 
     const formatRut = (rut) => {
         let valor = rut.replace(/[^0-9kK]/g, '');
@@ -57,35 +58,44 @@ export default function ProductPage() {
         const { name, value } = e.target;
         if (name === 'proveedorRut') {
             setForm({ ...form, [name]: formatRut(value) });
-        } else if (name === 'productId') {
+        } else if (name === 'productId' || name === 'categoria') {
+            // Forzamos mayúsculas en tiempo real para SKU y Categoría
             setForm({ ...form, [name]: value.toUpperCase() });
         } else {
             setForm({ ...form, [name]: value });
         }
     };
 
-    // --- FLUJO DE GUARDADO CON REVISIÓN ---
+    // --- FLUJO DE GUARDADO CON LIMPIEZA ---
     const handlePreSave = (e) => {
         e.preventDefault();
         
-        // Validación SKU Duplicado (Solo al crear)
         if (!isEditing) {
-            const skuExiste = products.some(p => p.sku === form.productId.trim());
+            const skuExiste = products.some(p => p.sku === form.productId.trim().toUpperCase());
             if (skuExiste) {
                 alert(`⛔ ERROR: El SKU "${form.productId}" ya existe.`);
                 return;
             }
         }
-        setShowConfirmModal(true); // Abrir modal para que el usuario confirme
+        setShowConfirmModal(true);
     };
 
     const confirmSave = async () => {
+        // Limpiamos espacios y aseguramos formato antes de enviar al backend
+        const cleanedForm = {
+            ...form,
+            productId: form.productId.trim().toUpperCase(),
+            nombre: form.nombre.trim(),
+            categoria: form.categoria.trim().toUpperCase(),
+            proveedorNombre: form.proveedorNombre.trim(),
+        };
+
         try {
             if (isEditing) {
-                await updateProduct(currentId, form);
+                await updateProduct(currentId, cleanedForm);
                 alert("✅ Producto actualizado correctamente");
             } else {
-                await createProduct(form);
+                await createProduct(cleanedForm);
                 alert("✅ Producto creado correctamente");
             }
             handleCancel();
@@ -131,9 +141,11 @@ export default function ProductPage() {
         setShowConfirmModal(false);
     };
 
+    // --- FILTRADO PARA EL BUSCADOR ---
     const productosFiltrados = products.filter(p => 
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.sku.toLowerCase().includes(searchTerm.toLowerCase())
+        p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.category?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     return (
@@ -156,7 +168,7 @@ export default function ProductPage() {
                                 <label className="form-label">SKU (Código Único)</label>
                                 <input 
                                     required name="productId" value={form.productId} onChange={handleChange} 
-                                    disabled={isEditing} // BLOQUEADO: No es modificable al editar
+                                    disabled={isEditing}
                                     className="form-input" style={{ fontWeight:'bold', opacity: isEditing ? 0.7 : 1 }}
                                 />
                             </div>
@@ -165,7 +177,7 @@ export default function ProductPage() {
                                 <input required name="nombre" value={form.nombre} onChange={handleChange} className="form-input" />
                             </div>
                             <div className="form-group" style={{marginTop:'10px'}}>
-                                <label className="form-label">Categoría (Autocomplete)</label>
+                                <label className="form-label">Categoría</label>
                                 <input 
                                     list="categorias-list" 
                                     name="categoria" 
@@ -212,20 +224,33 @@ export default function ProductPage() {
                 </form>
             </div>
 
+            {/* BARRA DE BÚSQUEDA */}
+            <div className="search-box" style={{ marginBottom: '20px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                    <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}>🔍</span>
+                    <input 
+                        type="text" 
+                        placeholder="Buscar por SKU, Nombre o Categoría..." 
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="form-input"
+                        style={{ paddingLeft: '35px', width: '100%', maxWidth: '500px' }}
+                    />
+                </div>
+            </div>
+
             {/* MODAL DE CONFIRMACIÓN */}
             {showConfirmModal && (
                 <div className="modal-overlay" style={{ display: 'flex', zIndex: 2000 }}>
                     <div className="modal-content" style={{ maxWidth: '450px' }}>
                         <h3 style={{ marginTop: 0 }}>Confirmar Registro</h3>
-                        <p style={{ color: '#718096' }}>Verifique los datos antes de {isEditing ? 'actualizar' : 'ingresar'}:</p>
+                        <p style={{ color: '#718096' }}>Verifique los datos (se guardarán en MAYÚSCULAS):</p>
                         
                         <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '8px', fontSize: '0.9rem', lineHeight: '1.6' }}>
-                            <div><strong>SKU:</strong> {form.productId}</div>
-                            <div><strong>Nombre:</strong> {form.nombre}</div>
-                            <div><strong>Categoría:</strong> {form.categoria}</div>
+                            <div><strong>SKU:</strong> {form.productId.trim().toUpperCase()}</div>
+                            <div><strong>Nombre:</strong> {form.nombre.trim()}</div>
+                            <div><strong>Categoría:</strong> {form.categoria.trim().toUpperCase()}</div>
                             <div><strong>Proveedor:</strong> {form.proveedorNombre}</div>
-                            <div><strong>RUT:</strong> {form.proveedorRut}</div>
-                            <div><strong>Stock:</strong> {form.stockMinimo} (mín) / {form.stockMaximo} (máx)</div>
                         </div>
 
                         <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
@@ -250,21 +275,29 @@ export default function ProductPage() {
                         </tr>
                     </thead>
                     <tbody>
-                        {productosFiltrados.map(p => (
-                            <tr key={p.id}>
-                                <td style={{fontWeight:'bold'}}>{p.sku}</td>
-                                <td><strong>{p.name}</strong></td>
-                                <td><span className="badge-category">{p.category}</span></td>
-                                <td style={{textAlign:'center'}}>{p.minStock} / {p.maxStock}</td>
-                                <td>{p.supplierName}</td>
-                                <td style={{textAlign:'center'}}>
-                                    <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
-                                        <button onClick={() => handleEdit(p)} className="btn-secondary" style={{ padding: '5px 8px' }}>✏️</button>
-                                        <button onClick={() => handleDelete(p.id)} className="btn-secondary" style={{ padding: '5px 8px', color: '#e53e3e' }}>🗑️</button>
-                                    </div>
+                        {productosFiltrados.length > 0 ? (
+                            productosFiltrados.map(p => (
+                                <tr key={p.id}>
+                                    <td style={{fontWeight:'bold'}}>{p.sku}</td>
+                                    <td><strong>{p.name}</strong></td>
+                                    <td><span className="badge-category">{p.category}</span></td>
+                                    <td style={{textAlign:'center'}}>{p.minStock} / {p.maxStock}</td>
+                                    <td>{p.supplierName}</td>
+                                    <td style={{textAlign:'center'}}>
+                                        <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                                            <button onClick={() => handleEdit(p)} className="btn-secondary" style={{ padding: '5px 8px' }}>✏️</button>
+                                            <button onClick={() => handleDelete(p.id)} className="btn-secondary" style={{ padding: '5px 8px', color: '#e53e3e' }}>🗑️</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))
+                        ) : (
+                            <tr>
+                                <td colSpan="6" style={{ textAlign: 'center', padding: '20px', color: '#a0aec0' }}>
+                                    No se encontraron productos que coincidan con la búsqueda.
                                 </td>
                             </tr>
-                        ))}
+                        )}
                     </tbody>
                 </table>
             </div>
